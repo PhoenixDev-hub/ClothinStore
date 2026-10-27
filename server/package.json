@@ -33,6 +33,7 @@
     "@nestjs/throttler": "^6.7.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "@supabase/server": "^1.4.1",
     "bullmq": "^5.81.5",
     "cache-manager": "^7.2.9",
     "cacheable": "^2.5.0",

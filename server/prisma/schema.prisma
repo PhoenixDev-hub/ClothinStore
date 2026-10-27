@@ -11,3 +11,79 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id          Int     @id @default(autoincrement())
+  name        String
+  slug        String     @unique
+  description String?
+  image       String?
+  position    Int        @default(0)
+  isActive    Boolean    @default(true)
+
+  parentId    Int?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([parentId])
+}
+
+model Product {
+  id               Int        @id @default(autoincrement())
+  name             String
+  slug             String        @unique
+  description      String
+  shortDescription String?
+  brand            String?
+  material         String?
+  tags             String[]
+
+  price            Int
+  compareAtPrice   Int?
+
+  images           String[]
+  status           ProductStatus @default(DRAFT)
+  isNew            Boolean       @default(false)
+  isFeatured       Boolean       @default(false)
+
+  categoryId       Int
+  category         Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  variants         Variant[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([categoryId])
+  @@index([status, isFeatured])
+  @@index([createdAt])
+}
+
+model Variant {
+  id         Int   @id @default(autoincrement())
+  sku        String   @unique
+  size       String
+  color      String
+  colorHex   String?
+  stock      Int      @default(0)
+  available  Boolean  @default(true)
+  price      Int?
+
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([productId, size, color])
+  @@index([productId])
+}

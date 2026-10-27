@@ -9,6 +9,9 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Migrations must run against a direct (non-pooled) connection.
+    // DATABASE_URL points to the Supabase pooler (port 6543), which breaks
+    // Prisma's prepared statements ("prepared statement s1 already exists").
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
