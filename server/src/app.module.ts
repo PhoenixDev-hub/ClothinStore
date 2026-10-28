@@ -8,6 +8,8 @@ import { createKeyv } from 'cacheable';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProductService } from './product/product.service';
+import { ProductsService } from './products/products.service';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { PrismaModule } from './prisma/prisma.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    ProductService,
+    ProductsService,
   ],
 })
 export class AppModule {}
