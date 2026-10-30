@@ -1,13 +1,13 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
-    BadRequestException,
-    ConflictException,
-    Inject,
-    Injectable,
-    NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProductStatus } from '@prisma/client';
-import { Cache } from 'cache-manager';
+import { Prisma, ProductStatus } from '../generated/prisma/client';
+import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -149,7 +149,6 @@ export class ProductsService {
     await this.invalidate(existing.slug);
     return { deleted: true, id };
   }
-
 
   private buildWhere(q: QueryProductsDto): Prisma.ProductWhereInput {
     const variantFilter: Prisma.VariantWhereInput = {
