@@ -1,15 +1,14 @@
 import { CacheModule, type CacheOptions } from '@nestjs/cache-manager';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { createKeyv as createRedisKeyv } from '@keyv/redis';
+import { createKeyvNonBlocking as createRedisKeyv } from '@keyv/redis';
 import { createKeyv } from 'cacheable';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
-import { ProductService } from './product/product.service';
-import { ProductsService } from './products/products.service';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -17,17 +16,44 @@ import { ProductsService } from './products/products.service';
     CacheModule.registerAsync({
       isGlobal: true,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService) => {
         const host = configService.get<string>('REDIS_HOST', 'localhost');
         const port = configService.get<number>('REDIS_PORT', 6379);
+        const ttl = 60_000;
+
+        const memory = createKeyv();
+        const redis = createRedisKeyv(`redis://${host}:${port}`, {
+          connectionTimeout: 1500,
+        });
+
+        const client = (
+          redis.store as unknown as {
+            client?: { connect: () => Promise<unknown> };
+          }
+        ).client;
+
+        const redisAvailable = await Promise.race([
+          (client?.connect() ?? Promise.reject(new Error('sem client')))
+            .then(() => true)
+            .catch(() => false),
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => resolve(false), 1500),
+          ),
+        ]);
+
+        if (!redisAvailable) {
+          Logger.warn(
+            `Redis indisponível em ${host}:${port}; usando cache em memória`,
+            'CacheModule',
+          );
+          await redis.disconnect();
+          return { stores: [memory], ttl } as unknown as CacheOptions;
+        }
 
         return {
-          stores: [
-            createKeyv(),
-            createRedisKeyv(`redis://${host}:${port}`),
-          ] as unknown as CacheOptions['stores'],
-          ttl: 60_000,
-        };
+          stores: [memory, redis],
+          ttl,
+        } as unknown as CacheOptions;
       },
     }),
     ThrottlerModule.forRoot([
@@ -38,6 +64,7 @@ import { ProductsService } from './products/products.service';
       },
     ]),
     PrismaModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -46,8 +73,6 @@ import { ProductsService } from './products/products.service';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    ProductService,
-    ProductsService,
   ],
 })
 export class AppModule {}

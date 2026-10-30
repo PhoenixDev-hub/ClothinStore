@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProductStatus } from '@prisma/client';
+import { ProductStatus } from '../../generated/prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -48,7 +48,9 @@ export class CreateVariantDto {
   @IsBoolean()
   available?: boolean;
 
-  @ApiPropertyOptional({ description: 'Preço próprio da variante, em centavos' })
+  @ApiPropertyOptional({
+    description: 'Preço próprio da variante, em centavos',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
