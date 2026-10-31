@@ -34,7 +34,7 @@ export class ProductsController {
   @ApiOperation({
     summary: 'Lista produtos paginados',
     description:
-      'Filtros: category (slug), size, color, inStock, minPrice, maxPrice (centavos), search e status. Cada item traz totalStock e inStock.',
+      'Filtros: category (slug), size, color, inStock, minPrice, maxPrice (centavos) e search. Cada item traz totalStock e inStock.',
   })
   @ApiOkResponse({ description: 'Lista paginada com categoria e variantes' })
   findAll(@Query() query: QueryProductsDto) {

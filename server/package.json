@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.6",
     "@fastify/static": "^10.1.7",
     "@keyv/redis": "^5.1.6",
     "@nestjs/bullmq": "^12.0.0",
@@ -50,7 +51,8 @@
     "ioredis": "^5.11.1",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

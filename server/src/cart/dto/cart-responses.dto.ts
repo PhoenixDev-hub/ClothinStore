@@ -21,14 +21,18 @@ export class QuoteItemDto {
   @ApiProperty({ example: 'Branco', nullable: true })
   variantColor: string | null;
 
-  @ApiProperty({ description: 'Preço unitário em centavos (do banco)', example: 5990 })
+  @ApiProperty({
+    description: 'Preço unitário em centavos (do banco)',
+    example: 5990,
+  })
   unitPrice: number;
 
   @ApiProperty({ example: 2 })
   quantity: number;
 
   @ApiProperty({
-    description: 'unitPrice × quantity em centavos; 0 se o item não está disponível',
+    description:
+      'unitPrice × quantity em centavos; 0 se o item não está disponível',
     example: 11980,
   })
   subtotal: number;
@@ -37,7 +41,8 @@ export class QuoteItemDto {
   available: boolean;
 
   @ApiProperty({
-    description: 'Estoque que pode ser comprado agora (0 se a variante/produto está indisponível)',
+    description:
+      'Estoque que pode ser comprado agora (0 se a variante/produto está indisponível)',
     example: 42,
   })
   maxStock: number;
@@ -47,7 +52,10 @@ export class QuoteItemDto {
 }
 
 export class CartQuoteResponseDto {
-  @ApiProperty({ type: [QuoteItemDto], description: 'Todos os itens, na ordem enviada' })
+  @ApiProperty({
+    type: [QuoteItemDto],
+    description: 'Todos os itens, na ordem enviada',
+  })
   items: QuoteItemDto[];
 
   @ApiProperty({ type: [QuoteItemDto] })
@@ -56,10 +64,16 @@ export class CartQuoteResponseDto {
   @ApiProperty({ type: [QuoteItemDto] })
   unavailableItems: QuoteItemDto[];
 
-  @ApiProperty({ description: 'Soma dos itens disponíveis, em centavos', example: 30970 })
+  @ApiProperty({
+    description: 'Soma dos itens disponíveis, em centavos',
+    example: 30970,
+  })
   subtotal: number;
 
-  @ApiProperty({ description: 'Igual ao subtotal (ainda sem frete/desconto)', example: 30970 })
+  @ApiProperty({
+    description: 'Igual ao subtotal (ainda sem frete/desconto)',
+    example: 30970,
+  })
   total: number;
 }
 

@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 import { CartItemDto } from './cart-item.dto';
 
 export class CartQuoteDto {

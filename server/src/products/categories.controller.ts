@@ -17,7 +17,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Admin } from 'src/common/guards/decorators/admin.decorator';
+import { Admin } from '../common/guards/decorators/admin.decorator';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 

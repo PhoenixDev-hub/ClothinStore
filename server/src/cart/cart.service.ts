@@ -1,23 +1,23 @@
 import {
-    BadRequestException,
-    Injectable,
-    InternalServerErrorException,
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ProductStatus } from '@prisma/client';
+import { ProductStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CartItemDto } from './dto/cart-item.dto';
 import {
-    CartQuoteResponseDto,
-    QuoteItemDto,
-    UnavailableReason,
-    WhatsAppResponseDto,
+  CartQuoteResponseDto,
+  QuoteItemDto,
+  UnavailableReason,
+  WhatsAppResponseDto,
 } from './dto/cart-responses.dto';
 
 const brl = (cents: number) =>
   (cents / 100)
     .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    .replace(/\u00A0/g, ' '); // troca espaço não separável por espaço normal
+    .replace(/\u00A0/g, ' ');
 
 @Injectable()
 export class CartService {
@@ -27,14 +27,12 @@ export class CartService {
   ) {}
 
   async quote(items: CartItemDto[]): Promise<CartQuoteResponseDto> {
-    // Junta SKUs repetidos somando as quantidades (a checagem de estoque é sobre o total).
     const requested = new Map<string, number>();
     for (const { sku, quantity } of items) {
       const key = sku.trim();
       requested.set(key, (requested.get(key) ?? 0) + quantity);
     }
 
-    // Sempre direto do banco (sem cache): preço e estoque nunca vêm do cliente.
     const variants = await this.prisma.variant.findMany({
       where: { sku: { in: [...requested.keys()] } },
       include: {
@@ -95,7 +93,7 @@ export class CartService {
       availableItems,
       unavailableItems,
       subtotal,
-      total: subtotal, // sem frete/desconto por enquanto
+      total: subtotal,
     };
   }
 

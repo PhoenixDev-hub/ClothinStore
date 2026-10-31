@@ -10,10 +10,11 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { CartModule } from './cart/cart.module';
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     CacheModule.registerAsync({
       isGlobal: true,
       inject: [ConfigService],
@@ -65,7 +66,6 @@ import { CartModule } from './cart/cart.module';
       },
     ]),
     PrismaModule,
-    ProductsModule,
     ProductsModule,
     CartModule,
   ],

@@ -1,9 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ProductStatus } from '../../generated/prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsEnum,
   IsInt,
   IsOptional,
   IsString,
