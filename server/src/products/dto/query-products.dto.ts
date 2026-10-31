@@ -69,9 +69,4 @@ export class QueryProductsDto {
   @IsOptional()
   @IsString()
   search?: string;
-
-  @ApiPropertyOptional({ enum: ProductStatus, default: ProductStatus.ACTIVE })
-  @IsOptional()
-  @IsEnum(ProductStatus)
-  status?: ProductStatus;
 }

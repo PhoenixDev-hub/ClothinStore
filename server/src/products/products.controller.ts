@@ -19,6 +19,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { Admin } from '../common/guards/decorators/admin.decorator';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -49,7 +50,7 @@ export class ProductsController {
     return this.productsService.findOne(slug);
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Post()
   @ApiOperation({ summary: 'Cria produto (com variantes e estoque)' })
   @ApiCreatedResponse({ description: 'Produto criado' })
@@ -61,7 +62,7 @@ export class ProductsController {
     return this.productsService.create(dto);
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Put(':id')
   @ApiOperation({
     summary: 'Atualiza produto',
@@ -75,7 +76,7 @@ export class ProductsController {
     return this.productsService.update(id, dto);
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Delete(':id')
   @ApiOperation({ summary: 'Remove produto e variantes' })
   @ApiParam({ name: 'id', type: Number })

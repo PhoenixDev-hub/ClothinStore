@@ -30,6 +30,7 @@ async function bootstrap() {
     .setTitle('Loja de Roupas API')
     .setDescription('API do MVP da loja de roupas')
     .setVersion('1.0')
+    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'api-key')
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);

@@ -1,19 +1,27 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
-
-function Home() {
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-background">
-      <h1 className="text-3xl font-semibold tracking-tight">Home</h1>
-    </main>
-  )
-}
+import { Routes, Route } from "react-router-dom"
+import { Toaster } from "@/components/ui/sonner"
+import StoreLayout from "@/components/store/StoreLayout"
+import Home from "@/pages/Home"
+import Catalog from "@/pages/Catalog"
+import ProductDetail from "@/pages/ProductDetail"
+import Checkout from "@/pages/Checkout"
+import Admin from "@/pages/Admin"
+import NotFound from "@/pages/NotFound"
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route element={<StoreLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/produtos" element={<Catalog />} />
+          <Route path="/produto/:id" element={<ProductDetail />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+        <Route path="/admin" element={<Admin />} />
       </Routes>
-    </BrowserRouter>
+      <Toaster />
+    </>
   )
 }

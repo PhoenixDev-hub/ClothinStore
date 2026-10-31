@@ -17,6 +17,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { Admin } from 'src/common/guards/decorators/admin.decorator';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
@@ -32,7 +33,7 @@ export class CategoriesController {
     return this.categoriesService.findAll();
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Post()
   @ApiOperation({ summary: 'Cria categoria' })
   @ApiCreatedResponse({ description: 'Categoria criada' })
@@ -41,7 +42,7 @@ export class CategoriesController {
     return this.categoriesService.create(dto);
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Put(':id')
   @ApiOperation({ summary: 'Atualiza categoria' })
   @ApiParam({ name: 'id', type: Number })
@@ -55,7 +56,7 @@ export class CategoriesController {
     return this.categoriesService.update(id, dto);
   }
 
-  // TODO(auth): proteger com guard de admin.
+  @Admin()
   @Delete(':id')
   @ApiOperation({ summary: 'Remove categoria' })
   @ApiParam({ name: 'id', type: Number })

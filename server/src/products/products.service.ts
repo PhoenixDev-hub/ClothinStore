@@ -158,7 +158,7 @@ export class ProductsService {
     };
 
     return {
-      status: q.status ?? ProductStatus.ACTIVE,
+      status: ProductStatus.ACTIVE,
       ...(q.category
         ? {
             category: {
