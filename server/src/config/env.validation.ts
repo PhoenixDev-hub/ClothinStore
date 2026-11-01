@@ -13,9 +13,8 @@ export const envSchema = z.object({
   SUPABASE_URL: z
     .string()
     .url()
-    .refine((v) => v.startsWith('https://'))
-    .optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+    .refine((v) => v.startsWith('https://')),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

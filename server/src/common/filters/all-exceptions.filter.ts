@@ -1,9 +1,18 @@
-import { Catch, ExceptionFilter, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
+import { STATUS_CODES } from 'node:http';
 
 interface Normalized {
   statusCode: number;
   message: string | string[];
-  error: string;
+  error?: string;
 }
 
 const PRISMA_ERRORS: Record<string, Normalized> = {
@@ -30,7 +39,90 @@ const PRISMA_ERRORS: Record<string, Normalized> = {
   P1002: { statusCode: 503, message: 'Banco de dados indisponível' },
 };
 
+const INTERNAL: Normalized = {
+  statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+  message: 'Erro interno do servidor',
+};
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-    private readonly logger = new Logger(AllExceptionsFilter.name)
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const { httpAdapter } = this.httpAdapterHost;
+    const ctx = host.switchToHttp();
+    const request = ctx.getRequest<unknown>();
+
+    const { statusCode, message, error } = this.normalize(exception);
+
+    if (statusCode >= 500) {
+      this.logger.error(
+        exception instanceof Error ? exception.message : String(exception),
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
+
+    httpAdapter.reply(
+      ctx.getResponse(),
+      {
+        statusCode,
+        message,
+        error: error ?? STATUS_CODES[statusCode] ?? 'Error',
+        timestamp: new Date().toISOString(),
+        path: String(httpAdapter.getRequestUrl(request)).split('?')[0],
+      },
+      statusCode,
+    );
+  }
+
+  private normalize(exception: unknown): Normalized {
+    if (exception instanceof HttpException) {
+      const res = exception.getResponse();
+      if (typeof res === 'string') {
+        return { statusCode: exception.getStatus(), message: res };
+      }
+      const body = res as { message?: string | string[]; error?: string };
+      return {
+        statusCode: exception.getStatus(),
+        message: body.message ?? exception.message,
+        error: body.error,
+      };
+    }
+
+    if (exception instanceof Error) {
+      const { name } = exception;
+      const code = (exception as { code?: unknown }).code;
+
+      if (
+        name === 'PrismaClientKnownRequestError' &&
+        typeof code === 'string'
+      ) {
+        const mapped = PRISMA_ERRORS[code];
+        if (!mapped) return INTERNAL;
+        const target = (exception as { meta?: { target?: unknown } }).meta
+          ?.target;
+        return code === 'P2002' && Array.isArray(target)
+          ? {
+              ...mapped,
+              message: `${Array.isArray(mapped.message) ? mapped.message.join(', ') : mapped.message} (${target.join(', ')})`,
+            }
+          : mapped;
+      }
+      if (name === 'PrismaClientValidationError') {
+        return { statusCode: 400, message: 'Dados inválidos para a operação' };
+      }
+      if (name === 'PrismaClientInitializationError') {
+        return { statusCode: 503, message: 'Banco de dados indisponível' };
+      }
+
+      const status = (exception as { statusCode?: unknown }).statusCode;
+      if (typeof status === 'number' && status >= 400 && status < 500) {
+        return { statusCode: status, message: exception.message };
+      }
+    }
+
+    return INTERNAL;
+  }
 }

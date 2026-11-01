@@ -1,16 +1,18 @@
+import { createKeyvNonBlocking as createRedisKeyv } from '@keyv/redis';
 import { CacheModule, type CacheOptions } from '@nestjs/cache-manager';
 import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { createKeyvNonBlocking as createRedisKeyv } from '@keyv/redis';
 import { createKeyv } from 'cacheable';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
-import { ProductsModule } from './products/products.module';
 import { CartModule } from './cart/cart.module';
 import { validateEnv } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
+import { ProductsModule } from './products/products.module';
+import { HealthModule } from './health/health.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -68,6 +70,8 @@ import { validateEnv } from './config/env.validation';
     PrismaModule,
     ProductsModule,
     CartModule,
+    UploadModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

@@ -16,8 +16,7 @@ const SESSION_KEY = "lookshow_admin_session"
 const ADMIN_PASSWORD = "lookshow"
 const ADMIN_PASSWORDS = new Set([ADMIN_PASSWORD, "admin"])
 
-// Cliente HTTP do backend NestJS, preservado para quando a vitrine passar a
-// consumir a API real. A camada abaixo funciona como catálogo local/offline.
+
 export const api = axios.create({
   baseURL: "http://localhost:3001/api",
   headers: {
