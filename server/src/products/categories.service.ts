@@ -1,5 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -41,6 +42,7 @@ export class CategoriesService {
   }
 
   async update(id: number, dto: UpdateCategoryDto) {
+    if (dto.parentId !== undefined) await this.assertNoCycle(id, dto.parentId);
     try {
       const category = await this.prisma.category.update({
         where: { id },
@@ -55,7 +57,32 @@ export class CategoriesService {
       if (errorCode(e) === 'P2002') {
         throw new ConflictException(`Slug "${dto.slug}" já está em uso`);
       }
+      if (errorCode(e) === 'P2003') {
+        throw new BadRequestException('parentId não existe');
+      }
       throw e;
+    }
+  }
+
+  /** Sobe a árvore a partir do novo pai; se encontrar a própria categoria, há ciclo. */
+  private async assertNoCycle(id: number, parentId: number) {
+    let current: number | null = parentId;
+    const visited = new Set<number>();
+
+    while (current !== null) {
+      if (current === id) {
+        throw new BadRequestException(
+          'parentId criaria um ciclo na árvore de categorias',
+        );
+      }
+      if (visited.has(current)) break; // árvore já inconsistente; não trava
+      visited.add(current);
+      const parent: { parentId: number | null } | null =
+        await this.prisma.category.findUnique({
+          where: { id: current },
+          select: { parentId: true },
+        });
+      current = parent?.parentId ?? null;
     }
   }
 

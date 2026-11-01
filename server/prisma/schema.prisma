@@ -86,4 +86,6 @@ model Variant {
 
   @@unique([productId, size, color])
   @@index([productId])
+  @@index([size])
+  @@index([color])
 }

@@ -8,6 +8,13 @@ export const envSchema = z.object({
   REDIS_HOST: z.string().min(1),
   REDIS_PORT: z.coerce.number().int().min(1).max(65535),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default('info'),
+  CORS_ORIGIN: z.string().default('http://localhost:5173'),
   ADMIN_API_KEY: z.string().min(32),
   WHATSAPP_NUMBER: z.string().regex(/^\d{10,15}$/),
   SUPABASE_URL: z

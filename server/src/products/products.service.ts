@@ -97,7 +97,7 @@ export class ProductsService {
         },
         include,
       });
-      await this.invalidate();
+      await this.invalidate(product.slug);
       return withStock(product);
     } catch (e) {
       this.handleWriteError(e, dto);

@@ -42,6 +42,11 @@ coverage/
 Thumbs.db
 *.sw?
 
+# Agents
+.codex
+.cursor
+.gemini
+
 # Temp
 .tmp/
 .temp/

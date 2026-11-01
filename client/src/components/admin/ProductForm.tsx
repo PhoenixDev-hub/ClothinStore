@@ -1,382 +1,335 @@
-import { useRef, useState } from "react";
-import type { FormEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Link2, Loader2, Plus, Star, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ImagePlus, Link2, Plus, Star, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import SafeImage from "@/components/store/SafeImage";
-import { apiPost, apiPut, apiUpload, ApiError } from "@/lib/api";
-import { CATEGORIES } from "@/lib/store";
-import type { Category, ColorOption, ImageUploadResult, Product, ProductCreate } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { useSaveProduct } from "@/hooks/queries";
+import { ALL_SIZES, CATEGORIES, cn } from "@/lib/utils";
+import type { CategorySlug, Product, ProductColor } from "@/types";
 
-const SIZE_PRESETS = ["PP", "P", "M", "G", "GG", "XG", "Único", "2", "4", "6", "8", "10", "12"];
-
-const toMoney = (v: number | null | undefined) => (v ? v.toFixed(2).replace(".", ",") : "");
-const parseMoney = (v: string) => {
-  const n = Number(v.replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : NaN;
-};
-
-interface Props {
-  initial?: Product | null;
-  onDone: () => void;
+interface FormState {
+  name: string;
+  description: string;
+  price: string;
+  compareAtPrice: string;
+  category: CategorySlug;
+  stock: string;
+  sizes: string[];
+  colors: ProductColor[];
+  images: string[];
+  isNew: boolean;
+  isBestSeller: boolean;
 }
 
-export default function ProductForm({ initial, onDone }: Props) {
-  const qc = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState(initial?.name ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [price, setPrice] = useState(toMoney(initial?.price));
-  const [compare, setCompare] = useState(toMoney(initial?.compare_at_price));
-  const [category, setCategory] = useState<Category>(initial?.category ?? "feminino");
-  const [sizes, setSizes] = useState<string[]>(initial?.sizes ?? []);
-  const [customSize, setCustomSize] = useState("");
-  const [colors, setColors] = useState<ColorOption[]>(initial?.colors ?? []);
-  const [stock, setStock] = useState(String(initial?.stock ?? 10));
-  const [isNew, setIsNew] = useState(initial?.is_new ?? true);
-  const [isBest, setIsBest] = useState(initial?.is_bestseller ?? false);
-  const [images, setImages] = useState<string[]>(initial?.images ?? []);
-  const [imageUrl, setImageUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+const empty: FormState = {
+  name: "",
+  description: "",
+  price: "",
+  compareAtPrice: "",
+  category: "feminino",
+  stock: "0",
+  sizes: [],
+  colors: [],
+  images: [],
+  isNew: false,
+  isBestSeller: false,
+};
 
-  const save = useMutation({
-    mutationFn: (body: ProductCreate) =>
-      initial ? apiPut<Product>(`/admin/products/${initial.id}`, body) : apiPost<Product>("/admin/products", body),
-    onSuccess: (p) => {
-      toast.success(initial ? "Produto atualizado" : `“${p.name}” cadastrado e já disponível na loja`);
-      qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["admin"] });
-      onDone();
-    },
-    onError: (e) => {
-      if (e instanceof ApiError && e.status === 401) setError("Sessão expirada. Entre novamente.");
-      else setError("Não foi possível salvar. Confira os campos.");
-    },
+const fromProduct = (p: Product): FormState => ({
+  name: p.name,
+  description: p.description,
+  price: p.price.toFixed(2).replace(".", ","),
+  compareAtPrice: p.compareAtPrice ? p.compareAtPrice.toFixed(2).replace(".", ",") : "",
+  category: p.category,
+  stock: String(p.stock),
+  sizes: p.sizes,
+  colors: p.colors,
+  images: p.images,
+  isNew: p.isNew,
+  isBestSeller: p.isBestSeller,
+});
+
+const toDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1000;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 
-  const toggleSize = (s: string) => setSizes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+const toNumber = (v: string) => Number(v.replace(",", "."));
 
-  const addCustomSize = () => {
-    const s = customSize.trim();
-    if (s && !sizes.includes(s)) setSizes((p) => [...p, s]);
-    setCustomSize("");
-  };
+export function ProductFormSheet({ open, onOpenChange, product }: { open: boolean; onOpenChange: (v: boolean) => void; product?: Product | null }) {
+  const [f, setF] = useState<FormState>(empty);
+  const [customSize, setCustomSize] = useState("");
+  const [link, setLink] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const save = useSaveProduct();
 
-  const addImageUrl = () => {
-    const u = imageUrl.trim();
-    if (!/^https?:\/\//i.test(u) && !u.startsWith("/api/")) {
-      toast.error("Cole um link de imagem válido (https://...)");
-      return;
+  useEffect(() => {
+    if (open) {
+      setF(product ? fromProduct(product) : empty);
+      setCustomSize("");
+      setLink("");
     }
-    setImages((p) => [...p, u]);
-    setImageUrl("");
-  };
+  }, [open, product]);
 
-  const uploadFiles = async (files: FileList | null) => {
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((s) => ({ ...s, [k]: v }));
+  const toggleSize = (s: string) => set("sizes", f.sizes.includes(s) ? f.sizes.filter((x) => x !== s) : [...f.sizes, s]);
+  const sizeOptions = [...ALL_SIZES, ...f.sizes.filter((s) => !ALL_SIZES.includes(s))];
+
+  const addFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    setUploading(true);
     try {
-      for (const f of Array.from(files)) {
-        const form = new FormData();
-        form.append("file", f);
-        const r = await apiUpload<ImageUploadResult>("/admin/images", form);
-        setImages((p) => [...p, r.url]);
-      }
-      toast.success("Foto(s) enviada(s)");
-    } catch (e) {
-      toast.error(e instanceof ApiError && e.status === 413 ? "Imagem muito grande (máx 8MB)" : "Falha ao enviar a foto");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+      const urls = await Promise.all(Array.from(files).map(toDataUrl));
+      set("images", [...f.images, ...urls]);
+    } catch {
+      toast.error("Não foi possível ler a imagem.");
     }
   };
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    setError("");
-    const p = parseMoney(price);
-    const c = compare.trim() ? parseMoney(compare) : null;
-    const st = Number.parseInt(stock, 10);
-    if (!name.trim()) return setError("Informe o nome do produto.");
-    if (!(p > 0)) return setError("Informe um preço válido (ex: 129,90).");
-    if (c !== null && Number.isNaN(c)) return setError("Preço “de” inválido.");
-    if (!Number.isFinite(st) || st < 0) return setError("Estoque inválido.");
-    if (sizes.length === 0) return setError("Selecione ao menos um tamanho (use “Único” para acessórios).");
-    if (colors.some((col) => !col.name.trim())) return setError("Dê um nome para todas as cores.");
-    save.mutate({
-      name: name.trim(),
-      description: description.trim(),
-      price: p,
-      compare_at_price: c && c > p ? c : null,
-      category,
-      sizes,
-      colors: colors.map((col) => ({ ...col, name: col.name.trim() })),
-      stock: st,
-      is_new: isNew,
-      is_bestseller: isBest,
-      images,
-    });
-  };
+  const makeCover = (i: number) => set("images", [f.images[i], ...f.images.filter((_, idx) => idx !== i)]);
 
-  const label = "text-[13px] font-semibold text-neutral-700";
-  const input = "h-11 rounded-xl border-neutral-300 bg-white";
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const price = toNumber(f.price);
+    if (!f.name.trim()) return toast.error("Informe o nome do produto.");
+    if (!price || price <= 0) return toast.error("Informe um preço válido.");
+    if (f.sizes.length === 0) return toast.error("Selecione ao menos um tamanho.");
+    if (f.images.length === 0) return toast.error("Adicione ao menos uma foto.");
+    await save.mutateAsync({
+      id: product?.id,
+      data: {
+        name: f.name.trim(),
+        description: f.description.trim(),
+        price,
+        compareAtPrice: f.compareAtPrice ? toNumber(f.compareAtPrice) : null,
+        category: f.category,
+        stock: Math.max(0, Math.floor(Number(f.stock) || 0)),
+        sizes: f.sizes,
+        colors: f.colors.filter((c) => c.name.trim()),
+        images: f.images,
+        isNew: f.isNew,
+        isBestSeller: f.isBestSeller,
+      },
+    });
+    toast.success(product ? "Produto atualizado" : "Produto criado");
+    onOpenChange(false);
+  };
 
   return (
-    <form onSubmit={submit} className="flex h-full flex-col" data-testid="product-form">
-      <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5 md:px-6">
-        <div className="space-y-1.5">
-          <Label htmlFor="pf-name" className={label}>Nome *</Label>
-          <Input id="pf-name" data-testid="product-form-name" value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Ex: Vestido Longo Cetim" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="pf-desc" className={label}>Descrição</Label>
-          <Textarea id="pf-desc" data-testid="product-form-description" value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-24 rounded-xl border-neutral-300 bg-white" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="pf-price" className={label}>Preço (R$) *</Label>
-            <Input id="pf-price" data-testid="product-form-price" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className={input} placeholder="129,90" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pf-compare" className={label}>Preço “de” (opcional)</Label>
-            <Input id="pf-compare" data-testid="product-form-compare-price" inputMode="decimal" value={compare} onChange={(e) => setCompare(e.target.value)} className={input} placeholder="159,90" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className={label}>Categoria *</Label>
-            <Select value={category} onValueChange={(v: string) => setCategory(v as Category)}>
-              <SelectTrigger className="h-11 w-full rounded-xl border-neutral-300 bg-white" data-testid="product-form-category">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c.id} value={c.id} data-testid={`product-form-category-${c.id}`}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pf-stock" className={label}>Estoque *</Label>
-            <Input id="pf-stock" data-testid="product-form-stock" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value.replace(/\D/g, ""))} className={input} />
-          </div>
-        </div>
-
-        <div className="space-y-2.5">
-          <Label className={label}>Tamanhos *</Label>
-          <div className="flex flex-wrap gap-2">
-            {[...SIZE_PRESETS, ...sizes.filter((s) => !SIZE_PRESETS.includes(s))].map((s) => {
-              const on = sizes.includes(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggleSize(s)}
-                  data-testid={`product-form-size-${s.toLowerCase()}`}
-                  aria-pressed={on}
-                  className={cn(
-                    "h-9 min-w-10 rounded-full border px-3 text-xs font-semibold transition-colors duration-200",
-                    on ? "border-wine bg-wine text-white" : "border-neutral-300 bg-white hover:border-ink",
-                  )}
-                >
-                  {s}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={customSize}
-              onChange={(e) => setCustomSize(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addCustomSize();
-                }
-              }}
-              placeholder="Outro tamanho (ex: 36)"
-              data-testid="product-form-custom-size"
-              className="h-9 rounded-full border-neutral-300 bg-white"
-            />
-            <button type="button" onClick={addCustomSize} data-testid="product-form-add-size" className="h-9 shrink-0 rounded-full bg-neutral-100 px-4 text-xs font-semibold hover:bg-neutral-200">
-              Adicionar
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <Label className={label}>Cores</Label>
-            <button
-              type="button"
-              onClick={() => setColors((p) => [...p, { name: "", hex: "#121212" }])}
-              data-testid="product-form-add-color"
-              className="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-200"
-            >
-              <Plus className="size-3.5" /> Cor
-            </button>
-          </div>
-          {colors.length === 0 && <p className="text-xs text-neutral-500">Sem cores cadastradas (aparecerá como “Única”).</p>}
-          {colors.map((c, i) => (
-            <div key={i} className="flex items-center gap-2" data-testid={`product-form-color-row-${i}`}>
-              <input
-                type="color"
-                value={c.hex}
-                onChange={(e) => setColors((p) => p.map((x, j) => (j === i ? { ...x, hex: e.target.value } : x)))}
-                data-testid={`product-form-color-hex-${i}`}
-                className="size-10 shrink-0 cursor-pointer rounded-full border border-neutral-300 bg-white p-1"
-                aria-label="Cor"
-              />
-              <Input
-                value={c.name}
-                onChange={(e) => setColors((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                placeholder="Nome da cor (ex: Vinho)"
-                data-testid={`product-form-color-name-${i}`}
-                className="h-10 rounded-full border-neutral-300 bg-white"
-              />
-              <button
-                type="button"
-                aria-label="Remover cor"
-                onClick={() => setColors((p) => p.filter((_, j) => j !== i))}
-                data-testid={`product-form-color-remove-${i}`}
-                className="flex size-9 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-red-50 hover:text-red-600"
-              >
-                <X className="size-4" />
-              </button>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent title={product ? "Editar produto" : "Novo produto"} className="max-w-[26.5rem]">
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
+            <div>
+              <Label>Nome *</Label>
+              <Input value={f.name} onChange={(e) => set("name", e.target.value)} className="h-9 rounded-lg text-xs" />
             </div>
-          ))}
-        </div>
+            <div>
+              <Label>Descrição</Label>
+              <Textarea value={f.description} onChange={(e) => set("description", e.target.value)} className="min-h-16 rounded-lg text-xs" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Preço (R$) *</Label>
+                <Input inputMode="decimal" value={f.price} onChange={(e) => set("price", e.target.value)} className="h-9 rounded-lg text-xs" />
+              </div>
+              <div>
+                <Label>Preço “de” (opcional)</Label>
+                <Input inputMode="decimal" value={f.compareAtPrice} onChange={(e) => set("compareAtPrice", e.target.value)} className="h-9 rounded-lg text-xs" />
+              </div>
+              <div>
+                <Label>Categoria *</Label>
+                <Select value={f.category} onValueChange={(v) => set("category", v as CategorySlug)}>
+                  <SelectTrigger className="h-9 w-full rounded-lg text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c.slug} value={c.slug}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Estoque *</Label>
+                <Input inputMode="numeric" value={f.stock} onChange={(e) => set("stock", e.target.value)} className="h-9 rounded-lg text-xs" />
+              </div>
+            </div>
 
-        <div className="space-y-2.5">
-          <Label className={label}>Fotos</Label>
-          <div className="grid grid-cols-4 gap-2.5">
-            {images.map((src, i) => (
-              <div key={`${src}-${i}`} className="group relative" data-testid={`product-form-image-${i}`}>
-                <SafeImage src={src} alt="" className="aspect-[3/4] w-full rounded-xl" />
-                {i === 0 && (
-                  <span className="absolute left-1.5 top-1.5 rounded-full bg-wine px-2 py-0.5 text-[9px] font-bold uppercase text-white">
-                    Capa
-                  </span>
-                )}
-                <div className="absolute inset-x-1.5 bottom-1.5 flex justify-between">
-                  {i > 0 ? (
-                    <button
-                      type="button"
-                      aria-label="Definir como capa"
-                      onClick={() => setImages((p) => [p[i], ...p.filter((_, j) => j !== i)])}
-                      data-testid={`product-form-image-cover-${i}`}
-                      className="flex size-7 items-center justify-center rounded-full bg-white/95 text-ink shadow"
-                    >
-                      <Star className="size-3.5" />
-                    </button>
-                  ) : (
-                    <span />
-                  )}
+            <div>
+              <Label>Tamanhos *</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {sizeOptions.map((s) => (
                   <button
                     type="button"
-                    aria-label="Remover foto"
-                    onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
-                    data-testid={`product-form-image-remove-${i}`}
-                    className="flex size-7 items-center justify-center rounded-full bg-white/95 text-red-600 shadow"
+                    key={s}
+                    onClick={() => toggleSize(s)}
+                    className={cn(
+                      "grid h-7 min-w-7 place-items-center rounded-full border px-2.5 text-[10px] font-medium transition",
+                      f.sizes.includes(s) ? "border-wine bg-wine text-white" : "border-border bg-white hover:border-wine",
+                    )}
                   >
-                    <Trash2 className="size-3.5" />
+                    {s}
                   </button>
-                </div>
+                ))}
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              data-testid="product-form-upload-button"
-              className="flex aspect-[3/4] flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-neutral-300 text-neutral-500 transition-colors duration-200 hover:border-wine hover:text-wine"
-            >
-              {uploading ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
-              <span className="text-[10px] font-semibold">{uploading ? "Enviando" : "Enviar"}</span>
-            </button>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => void uploadFiles(e.target.files)}
-            data-testid="product-form-file-input"
-          />
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-neutral-400" />
-              <Input
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addImageUrl();
-                  }
-                }}
-                placeholder="Ou cole o link da imagem"
-                data-testid="product-form-image-url"
-                className="h-10 rounded-full border-neutral-300 bg-white pl-9"
-              />
+              <div className="mt-2 flex gap-2">
+                <Input
+                  placeholder="Outro tamanho (ex: 36)"
+                  value={customSize}
+                  onChange={(e) => setCustomSize(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      document.getElementById("add-size")?.click();
+                    }
+                  }}
+                  className="h-9 rounded-lg text-xs"
+                />
+                <Button
+                  id="add-size"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => {
+                    const v = customSize.trim();
+                    if (v && !f.sizes.includes(v)) set("sizes", [...f.sizes, v]);
+                    setCustomSize("");
+                  }}
+                >
+                  Adicionar
+                </Button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={addImageUrl}
-              data-testid="product-form-add-image-url"
-              className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-4 text-xs font-semibold hover:bg-neutral-200"
-            >
-              <Upload className="size-3.5" /> Adicionar
-            </button>
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <Label className="mb-0">Cores</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={() => set("colors", [...f.colors, { name: "", hex: "#111111" }])}>
+                  <Plus className="size-3" /> Cor
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {f.colors.map((c, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <label className="relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-md ring-1 ring-black/15" style={{ background: c.hex }}>
+                      <input
+                        type="color"
+                        value={c.hex}
+                        onChange={(e) => set("colors", f.colors.map((x, idx) => (idx === i ? { ...x, hex: e.target.value } : x)))}
+                        className="absolute inset-0 size-full cursor-pointer opacity-0"
+                        aria-label="Escolher cor"
+                      />
+                    </label>
+                    <Input
+                      placeholder="Nome da cor (ex: Vinho)"
+                      value={c.name}
+                      onChange={(e) => set("colors", f.colors.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)))}
+                      className="h-9 rounded-lg text-xs"
+                    />
+                    <button type="button" onClick={() => set("colors", f.colors.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-red-600" aria-label="Remover cor">
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label>Fotos</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {f.images.map((src, i) => (
+                  <div key={src.slice(-24) + i} className="group relative aspect-[3/4] overflow-hidden rounded-xl bg-muted">
+                    <img src={src} alt="" className="size-full object-cover" />
+                    {i === 0 && <span className="absolute left-1 top-1 rounded-full bg-wine px-1.5 py-0.5 text-[7px] font-bold uppercase text-white">Capa</span>}
+                    <div className="absolute inset-x-1 bottom-1 flex justify-between">
+                      {i !== 0 ? (
+                        <button type="button" onClick={() => makeCover(i)} className="grid size-5 place-items-center rounded-full bg-white/90 text-ink shadow" aria-label="Definir como capa">
+                          <Star className="size-2.5" />
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                      <button type="button" onClick={() => set("images", f.images.filter((_, idx) => idx !== i))} className="grid size-5 place-items-center rounded-full bg-white/90 text-red-600 shadow" aria-label="Remover foto">
+                        <Trash2 className="size-2.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="grid aspect-[3/4] place-items-center rounded-xl border border-dashed border-border text-[9px] text-muted-foreground transition hover:border-wine hover:text-wine"
+                >
+                  <span className="flex flex-col items-center gap-1">
+                    <ImagePlus className="size-4" /> Enviar
+                  </span>
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+              </div>
+              <div className="mt-2 flex gap-2">
+                <div className="relative flex-1">
+                  <Link2 className="pointer-events-none absolute left-3 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Ou cole o link da imagem" value={link} onChange={(e) => setLink(e.target.value)} className="h-9 rounded-lg pl-8 text-xs" />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => {
+                    if (/^https?:\/\//.test(link.trim())) {
+                      set("images", [...f.images, link.trim()]);
+                      setLink("");
+                    } else toast.error("Cole um link http(s) válido.");
+                  }}
+                >
+                  <Upload /> Adicionar
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex gap-5 pt-1">
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <Checkbox checked={f.isNew} onCheckedChange={(v) => set("isNew", v === true)} className="rounded-[5px]" /> Novidade
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <Checkbox checked={f.isBestSeller} onCheckedChange={(v) => set("isBestSeller", v === true)} className="rounded-[5px]" /> Mais vendido
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-6">
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
-            <Checkbox checked={isNew} onCheckedChange={(v) => setIsNew(Boolean(v))} data-testid="product-form-is-new" />
-            Novidade
-          </label>
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
-            <Checkbox checked={isBest} onCheckedChange={(v) => setIsBest(Boolean(v))} data-testid="product-form-is-bestseller" />
-            Mais vendido
-          </label>
-        </div>
-      </div>
-
-      <div className="border-t border-neutral-100 bg-white px-5 py-4 md:px-6">
-        {error && (
-          <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700" data-testid="product-form-error">
-            {error}
-          </p>
-        )}
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={onDone}
-            data-testid="product-form-cancel"
-            className="h-12 flex-1 rounded-full border border-neutral-300 text-sm font-semibold hover:border-ink"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={save.isPending || uploading}
-            data-testid="product-form-submit"
-            className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-wine text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-wine-hover active:scale-[0.98] disabled:opacity-60"
-          >
-            {save.isPending && <Loader2 className="size-4 animate-spin" />}
-            {initial ? "Salvar alterações" : "Cadastrar produto"}
-          </button>
-        </div>
-      </div>
-    </form>
+          <div className="flex gap-2 border-t border-border bg-white px-6 py-4">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" className="flex-1" disabled={save.isPending}>
+              {save.isPending ? "Salvando..." : "Salvar produto"}
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }

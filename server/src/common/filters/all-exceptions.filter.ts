@@ -4,9 +4,9 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import { PinoLogger } from 'nestjs-pino';
 import { STATUS_CODES } from 'node:http';
 
 interface Normalized {
@@ -46,22 +46,32 @@ const INTERNAL: Normalized = {
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionsFilter.name);
-
-  constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
+  constructor(
+    private readonly httpAdapterHost: HttpAdapterHost,
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(AllExceptionsFilter.name);
+  }
 
   catch(exception: unknown, host: ArgumentsHost) {
     const { httpAdapter } = this.httpAdapterHost;
     const ctx = host.switchToHttp();
-    const request = ctx.getRequest<unknown>();
+    const request = ctx.getRequest<{ id?: string; url?: string }>();
 
     const { statusCode, message, error } = this.normalize(exception);
+    const log = {
+      reqId: request.id,
+      statusCode,
+      path: String(httpAdapter.getRequestUrl(request)).split('?')[0],
+    };
 
     if (statusCode >= 500) {
       this.logger.error(
-        exception instanceof Error ? exception.message : String(exception),
-        exception instanceof Error ? exception.stack : undefined,
+        { ...log, err: exception instanceof Error ? exception : undefined },
+        'Unhandled request error',
       );
+    } else {
+      this.logger.warn(log, 'Request failed');
     }
 
     httpAdapter.reply(
