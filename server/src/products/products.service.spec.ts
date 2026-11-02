@@ -124,6 +124,14 @@ describe('ProductsService', () => {
       });
     });
 
+    it('ignores status=DRAFT on the public list and still forces ACTIVE', async () => {
+      await service.findAll(query({ status: ProductStatus.DRAFT }));
+
+      expect(whereFromLastList()).toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+    });
+
     it('counts totalStock only from available variants', async () => {
       prisma.product.count.mockResolvedValue(1);
       prisma.product.findMany.mockResolvedValue([
@@ -147,6 +155,62 @@ describe('ProductsService', () => {
       prisma.product.findFirst.mockResolvedValue(null);
 
       await expect(service.findOne('nao-existe')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('findAllAdmin', () => {
+    it('lists every status when no status filter is given', async () => {
+      await service.findAllAdmin(query());
+
+      expect(whereFromLastList()).not.toHaveProperty('status');
+    });
+
+    it('filters by status when given', async () => {
+      await service.findAllAdmin(query({ status: ProductStatus.DRAFT }));
+
+      expect(whereFromLastList()).toMatchObject({
+        status: ProductStatus.DRAFT,
+      });
+    });
+
+    it('does not use the public cache', async () => {
+      await service.findAllAdmin(query());
+
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findOneAdmin', () => {
+    it('returns a DRAFT product by id', async () => {
+      prisma.product.findUnique.mockResolvedValue(
+        productRow({
+          id: 2,
+          slug: 'rascunho',
+          status: ProductStatus.DRAFT,
+          variants: [{ stock: 3, available: true }],
+        }),
+      );
+
+      const result = await service.findOneAdmin(2);
+
+      const calls = prisma.product.findUnique.mock.calls as [
+        { where: { id: number } },
+      ][];
+      expect(calls.at(-1)?.[0].where).toEqual({ id: 2 });
+      expect(result).toMatchObject({
+        slug: 'rascunho',
+        status: ProductStatus.DRAFT,
+        totalStock: 3,
+      });
+    });
+
+    it('returns 404 when the product does not exist', async () => {
+      prisma.product.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOneAdmin(99)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });

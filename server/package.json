@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "postinstall": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -45,7 +46,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^18.0.9",
-    "fastify": "^5.11.3",
+    "fastify": "^5.12.7",
     "ioredis": "^5.11.1",
     "nestjs-pino": "^4.6.1",
     "pg": "^8.23.1",
@@ -83,6 +84,9 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "fastify": "^5.12.7"
   },
   "jest": {
     "moduleFileExtensions": [

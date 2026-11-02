@@ -14,6 +14,7 @@ import { AdminApiKeyGuard } from '../src/common/guards/admin-api-key.guard';
 import { ProductStatus } from '../src/generated/prisma/client';
 import { HealthController } from '../src/health/health.controller';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AdminProductsController } from '../src/products/admin-products.controller';
 import { ProductsController } from '../src/products/products.controller';
 import { ProductsService } from '../src/products/products.service';
 
@@ -52,6 +53,14 @@ const activeProduct = {
   ],
 };
 
+const draftProduct = {
+  ...activeProduct,
+  id: 2,
+  name: 'Rascunho',
+  slug: 'rascunho',
+  status: ProductStatus.DRAFT,
+};
+
 describe('Critical endpoints (e2e)', () => {
   let app: NestFastifyApplication;
   let prisma: {
@@ -59,6 +68,7 @@ describe('Critical endpoints (e2e)', () => {
       count: jest.Mock;
       findMany: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       create: jest.Mock;
     };
     variant: { findMany: jest.Mock };
@@ -72,6 +82,7 @@ describe('Critical endpoints (e2e)', () => {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(activeProduct),
       },
       variant: { findMany: jest.fn().mockResolvedValue([]) },
@@ -102,6 +113,7 @@ describe('Critical endpoints (e2e)', () => {
       controllers: [
         AppController,
         ProductsController,
+        AdminProductsController,
         CartController,
         HealthController,
       ],
@@ -168,6 +180,29 @@ describe('Critical endpoints (e2e)', () => {
         },
       });
     });
+
+    it('ignores status=DRAFT and returns 200 with only ACTIVE products', async () => {
+      prisma.product.count.mockResolvedValue(1);
+      prisma.product.findMany.mockResolvedValue([activeProduct]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/products?status=DRAFT',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json<{ data: { status: ProductStatus }[] }>();
+      expect(body.data).toHaveLength(1);
+      expect(body.data.every((p) => p.status === ProductStatus.ACTIVE)).toBe(
+        true,
+      );
+      const countCalls = prisma.product.count.mock.calls as [
+        { where: unknown },
+      ][];
+      expect(countCalls.at(-1)?.[0].where).toMatchObject({
+        status: ProductStatus.ACTIVE,
+      });
+    });
   });
 
   describe('GET /api/products/:slug', () => {
@@ -192,6 +227,96 @@ describe('Critical endpoints (e2e)', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/products/nao-existe',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('GET /api/admin/products', () => {
+    it('returns 401 without x-api-key', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 including DRAFT products with a valid x-api-key', async () => {
+      prisma.product.count.mockResolvedValue(2);
+      prisma.product.findMany.mockResolvedValue([activeProduct, draftProduct]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products',
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json<{
+        data: { slug: string; status: ProductStatus }[];
+      }>();
+      expect(body.data.map((p) => p.slug)).toEqual(['camiseta', 'rascunho']);
+      const countCalls = prisma.product.count.mock.calls as [
+        { where: unknown },
+      ][];
+      expect(countCalls.at(-1)?.[0].where).not.toHaveProperty('status');
+    });
+
+    it('filters by status when given', async () => {
+      prisma.product.count.mockResolvedValue(1);
+      prisma.product.findMany.mockResolvedValue([draftProduct]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products?status=DRAFT',
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const countCalls = prisma.product.count.mock.calls as [
+        { where: unknown },
+      ][];
+      expect(countCalls.at(-1)?.[0].where).toMatchObject({
+        status: ProductStatus.DRAFT,
+      });
+    });
+  });
+
+  describe('GET /api/admin/products/:id', () => {
+    it('returns 401 without x-api-key', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products/2',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 for a DRAFT product with a valid x-api-key', async () => {
+      prisma.product.findUnique.mockResolvedValue(draftProduct);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products/2',
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        slug: 'rascunho',
+        status: ProductStatus.DRAFT,
+      });
+    });
+
+    it('returns 404 for an unknown id', async () => {
+      prisma.product.findUnique.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/admin/products/99',
+        headers: { 'x-api-key': ADMIN_KEY },
       });
 
       expect(response.statusCode).toBe(404);

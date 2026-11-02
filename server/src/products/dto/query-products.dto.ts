@@ -2,12 +2,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
   Max,
   Min,
 } from 'class-validator';
+import { ProductStatus } from '../../generated/prisma/client';
 
 export class QueryProductsDto {
   @ApiPropertyOptional({ default: 1 })
@@ -67,4 +69,13 @@ export class QueryProductsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    enum: ProductStatus,
+    description:
+      'Filtro por status apenas na listagem administrativa; ignorado em GET /api/products',
+  })
+  @IsOptional()
+  @IsEnum(ProductStatus)
+  status?: ProductStatus;
 }

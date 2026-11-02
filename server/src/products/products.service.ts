@@ -42,32 +42,40 @@ export class ProductsService {
   ) {}
 
   async findAll(query: QueryProductsDto) {
+    // status is administrative-only: the public list always returns ACTIVE
+    const filters = { ...query, status: undefined };
     const version = (await this.cache.get<number>(LIST_VERSION_KEY)) ?? 0;
-    const cacheKey = `products:list:v${version}:${JSON.stringify(query)}`;
+    const cacheKey = `products:list:v${version}:${JSON.stringify(filters)}`;
 
     const cached = await this.cache.get<PaginatedResult<unknown>>(cacheKey);
     if (cached) return cached;
 
-    const { page, limit } = query;
-    const where = this.buildWhere(query);
-
-    const [total, rows] = await this.prisma.$transaction([
-      this.prisma.product.count({ where }),
-      this.prisma.product.findMany({
-        where,
-        include,
-        orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
-
-    const result = {
-      data: rows.map(withStock),
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+    const result = await this.paginate(
+      this.buildWhere(filters, ProductStatus.ACTIVE),
+      query.page,
+      query.limit,
+    );
     await this.cache.set(cacheKey, result, CACHE_TTL_MS);
     return result;
+  }
+
+  findAllAdmin(query: QueryProductsDto) {
+    return this.paginate(
+      this.buildWhere(query, query.status),
+      query.page,
+      query.limit,
+    );
+  }
+
+  async findOneAdmin(id: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include,
+    });
+    if (!product) {
+      throw new NotFoundException(`Produto ${id} não encontrado`);
+    }
+    return withStock(product);
   }
 
   async findOne(slug: string) {
@@ -150,7 +158,32 @@ export class ProductsService {
     return { deleted: true, id };
   }
 
-  private buildWhere(q: QueryProductsDto): Prisma.ProductWhereInput {
+  private async paginate(
+    where: Prisma.ProductWhereInput,
+    page: number,
+    limit: number,
+  ) {
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        include,
+        orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      data: rows.map(withStock),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  private buildWhere(
+    q: QueryProductsDto,
+    status?: ProductStatus,
+  ): Prisma.ProductWhereInput {
     const variantFilter: Prisma.VariantWhereInput = {
       ...(q.size ? { size: q.size } : {}),
       ...(q.color ? { color: q.color } : {}),
@@ -158,7 +191,7 @@ export class ProductsService {
     };
 
     return {
-      status: ProductStatus.ACTIVE,
+      ...(status ? { status } : {}),
       ...(q.category
         ? {
             category: {
