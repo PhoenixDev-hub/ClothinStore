@@ -9,6 +9,7 @@ import { LoggerModule, PinoLogger } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CartModule } from './cart/cart.module';
+import { AdminAuthModule } from './auth/admin-auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
@@ -28,6 +29,9 @@ import { UploadModule } from './upload/upload.module';
             paths: [
               'req.headers.authorization',
               'req.headers["x-api-key"]',
+              'req.headers.cookie',
+              'req.headers["set-cookie"]',
+              'req.body.apiKey',
               'req.body.password',
             ],
             censor: '[REDACTED]',
@@ -86,6 +90,7 @@ import { UploadModule } from './upload/upload.module';
       },
     ]),
     PrismaModule,
+    AdminAuthModule,
     ProductsModule,
     CartModule,
     UploadModule,

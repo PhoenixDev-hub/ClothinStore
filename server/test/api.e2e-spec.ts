@@ -1,6 +1,7 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { ValidationPipe } from '@nestjs/common';
+import { UnauthorizedException, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import cookie from '@fastify/cookie';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -11,6 +12,8 @@ import { AppService } from '../src/app.service';
 import { CartController } from '../src/cart/cart.controller';
 import { CartService } from '../src/cart/cart.service';
 import { AdminApiKeyGuard } from '../src/common/guards/admin-api-key.guard';
+import { AdminAuthService } from '../src/auth/admin-auth.service';
+import { AdminAuthController } from '../src/auth/admin-auth.controller';
 import { ProductStatus } from '../src/generated/prisma/client';
 import { HealthController } from '../src/health/health.controller';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -32,7 +35,14 @@ jest.mock('ioredis', () => ({
 }));
 
 const ADMIN_KEY = 'test-admin-key-with-at-least-32-characters';
+const SESSION_TOKEN = 'opaque-admin-session-token';
 const WHATSAPP_NUMBER = '5585999999999';
+const adminAuth = {
+  verifyAdminKey: jest.fn(),
+  createSession: jest.fn().mockResolvedValue(SESSION_TOKEN),
+  isSessionValid: jest.fn().mockResolvedValue(false),
+  revokeSession: jest.fn(),
+};
 
 const activeProduct = {
   id: 1,
@@ -112,6 +122,7 @@ describe('Critical endpoints (e2e)', () => {
       ],
       controllers: [
         AppController,
+        AdminAuthController,
         ProductsController,
         AdminProductsController,
         CartController,
@@ -122,6 +133,10 @@ describe('Critical endpoints (e2e)', () => {
         ProductsService,
         CartService,
         AdminApiKeyGuard,
+        {
+          provide: AdminAuthService,
+          useValue: adminAuth,
+        },
         { provide: PrismaService, useValue: prisma },
         {
           provide: CACHE_MANAGER,
@@ -137,6 +152,11 @@ describe('Critical endpoints (e2e)', () => {
     app = moduleFixture.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
+    await app.register(cookie);
+    app.enableCors({
+      origin: ['http://localhost:5174'],
+      credentials: true,
+    });
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
@@ -281,6 +301,89 @@ describe('Critical endpoints (e2e)', () => {
       expect(countCalls.at(-1)?.[0].where).toMatchObject({
         status: ProductStatus.DRAFT,
       });
+    });
+  });
+
+  describe('admin session endpoints', () => {
+    it('allows the configured admin origin to send credentialed requests', async () => {
+      const response = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/auth/admin',
+        headers: {
+          origin: 'http://localhost:5174',
+          'access-control-request-method': 'POST',
+        },
+      });
+
+      expect(response.headers['access-control-allow-origin']).toBe(
+        'http://localhost:5174',
+      );
+      expect(response.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('sets an HttpOnly, Secure, SameSite=Strict eight-hour cookie on login', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/admin',
+        payload: { apiKey: ADMIN_KEY },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toEqual({ authenticated: true });
+      expect(response.headers['set-cookie']).toEqual(
+        expect.stringContaining('admin_session='),
+      );
+      expect(response.headers['set-cookie']).toContain('HttpOnly');
+      expect(response.headers['set-cookie']).toContain('Secure');
+      expect(response.headers['set-cookie']).toContain('SameSite=Strict');
+      expect(response.headers['set-cookie']).toContain('Max-Age=28800');
+      expect(response.headers['set-cookie']).toContain('Path=/api');
+      expect(adminAuth.verifyAdminKey).toHaveBeenCalledWith(ADMIN_KEY);
+      expect(adminAuth.createSession).toHaveBeenCalled();
+    });
+
+    it('rejects an invalid key without creating a session', async () => {
+      adminAuth.createSession.mockClear();
+      adminAuth.verifyAdminKey.mockImplementationOnce(() => {
+        throw new UnauthorizedException('invalid');
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/admin',
+        payload: { apiKey: 'invalid' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(adminAuth.createSession).not.toHaveBeenCalled();
+    });
+
+    it('validates the session cookie and clears it on logout', async () => {
+      adminAuth.isSessionValid.mockResolvedValueOnce(true);
+      const me = await app.inject({
+        method: 'GET',
+        url: '/api/auth/admin/me',
+        headers: { cookie: `admin_session=${SESSION_TOKEN}` },
+      });
+
+      expect(me.statusCode).toBe(200);
+      expect(adminAuth.isSessionValid).toHaveBeenCalledWith(SESSION_TOKEN);
+
+      const logout = await app.inject({
+        method: 'POST',
+        url: '/api/auth/admin/logout',
+        headers: { cookie: `admin_session=${SESSION_TOKEN}` },
+      });
+
+      expect(logout.statusCode).toBe(204);
+      expect(adminAuth.revokeSession).toHaveBeenCalledWith(SESSION_TOKEN);
+      expect(logout.headers['set-cookie']).toContain('admin_session=;');
+      expect(logout.headers['set-cookie']).toContain(
+        'Expires=Thu, 01 Jan 1970',
+      );
+      expect(logout.headers['set-cookie']).toContain('HttpOnly');
+      expect(logout.headers['set-cookie']).toContain('Secure');
+      expect(logout.headers['set-cookie']).toContain('SameSite=Strict');
     });
   });
 

@@ -14,7 +14,9 @@ export const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  CORS_ORIGIN: z
+    .string()
+    .default('http://localhost:5173,http://localhost:5174'),
   ADMIN_API_KEY: z.string().min(32),
   WHATSAPP_NUMBER: z.string().regex(/^\d{10,15}$/),
   SUPABASE_URL: z

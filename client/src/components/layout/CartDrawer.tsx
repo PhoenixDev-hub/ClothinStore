@@ -1,8 +1,8 @@
 import { Link } from "react-router";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { useCart, cartTotal, cartCount } from "@/store/cart";
+import { cartCount, cartTotal, useCart } from "@/store/cart";
 import { formatBRL } from "@/lib/utils";
 
 export function CartDrawer() {
@@ -10,7 +10,11 @@ export function CartDrawer() {
   const total = cartTotal(items);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent title={`Carrinho (${cartCount(items)})`} description="Revise suas peças antes de finalizar pelo WhatsApp.">
+      <SheetContent className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle className="text-lg font-semibold">Carrinho ({cartCount(items)})</SheetTitle>
+          <SheetDescription>Revise suas peças antes de enviar o pedido.</SheetDescription>
+        </SheetHeader>
         {items.length === 0 ? (
           <div className="grid flex-1 place-items-center px-6 text-center">
             <div>
@@ -18,7 +22,7 @@ export function CartDrawer() {
                 <ShoppingBag className="size-6 text-muted-foreground" />
               </span>
               <p className="mt-4 font-display text-base font-semibold">Seu carrinho está vazio</p>
-              <p className="mt-1 text-xs text-muted-foreground">Escolha suas peças favoritas e volte aqui.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Escolha suas peças e volte aqui.</p>
               <Button asChild className="mt-5" onClick={() => setOpen(false)}>
                 <Link to="/produtos">Ver produtos</Link>
               </Button>
@@ -28,23 +32,55 @@ export function CartDrawer() {
           <>
             <ul className="flex-1 space-y-4 overflow-y-auto px-6 py-2">
               {items.map((i) => (
-                <li key={i.key} className="flex gap-3">
-                  <img src={i.image} alt="" className="h-24 w-[72px] rounded-xl object-cover" />
+                <li key={i.sku} className="flex gap-3">
+                  {i.image ? (
+                    <img
+                      src={i.image}
+                      alt={i.name}
+                      width={144}
+                      height={192}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-24 w-[72px] rounded-xl object-cover"
+                    />
+                  ) : (
+                    <span className="grid h-24 w-[72px] place-items-center rounded-xl bg-muted text-muted-foreground">
+                      <ShoppingBag className="size-5" />
+                    </span>
+                  )}
                   <div className="flex min-w-0 flex-1 flex-col">
                     <p className="truncate text-sm font-medium">{i.name}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{[i.color, i.size && `Tam. ${i.size}`].filter(Boolean).join(" · ")}</p>
-                    <p className="mt-1 text-sm font-semibold text-wine">{formatBRL(i.price)}</p>
-                    <div className="mt-auto flex items-center justify-between">
-                      <div className="flex h-8 items-center rounded-full border border-border">
-                        <button className="grid size-8 place-items-center" onClick={() => setQty(i.key, i.qty - 1)} aria-label="Diminuir">
-                          <Minus className="size-3" />
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {[i.color, i.size && `Tam. ${i.size}`].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-wine">{formatBRL(i.unitPrice)}</p>
+                    <div className="mt-auto flex items-center gap-2">
+                      <div className="flex h-12 items-center rounded-full border border-border">
+                        <button
+                          type="button"
+                          className="grid size-11 place-items-center rounded-full transition-colors duration-200 hover:bg-muted"
+                          onClick={() => setQty(i.sku, i.qty - 1)}
+                          aria-label={`Diminuir quantidade de ${i.name}`}
+                        >
+                          <Minus className="size-4" />
                         </button>
-                        <span className="w-5 text-center text-xs font-medium">{i.qty}</span>
-                        <button className="grid size-8 place-items-center" onClick={() => setQty(i.key, i.qty + 1)} aria-label="Aumentar">
-                          <Plus className="size-3" />
+                        <span className="w-6 text-center text-sm font-medium">{i.qty}</span>
+                        <button
+                          type="button"
+                          className="grid size-11 place-items-center rounded-full transition-colors duration-200 hover:bg-muted disabled:opacity-40"
+                          onClick={() => setQty(i.sku, i.qty + 1)}
+                          disabled={i.qty >= i.maxStock}
+                          aria-label={`Aumentar quantidade de ${i.name}`}
+                        >
+                          <Plus className="size-4" />
                         </button>
                       </div>
-                      <button onClick={() => remove(i.key)} className="text-muted-foreground transition hover:text-red-600" aria-label="Remover">
+                      <button
+                        type="button"
+                        onClick={() => remove(i.sku)}
+                        className="grid size-11 place-items-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-red-600"
+                        aria-label={`Remover ${i.name} do carrinho`}
+                      >
                         <Trash2 className="size-4" />
                       </button>
                     </div>
@@ -57,9 +93,9 @@ export function CartDrawer() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-display text-lg font-semibold">{formatBRL(total)}</span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Frete e pagamento combinados no WhatsApp.</p>
+              <p className="text-sm text-muted-foreground">Frete e pagamento combinados no WhatsApp.</p>
               <Button asChild size="lg" className="w-full" onClick={() => setOpen(false)}>
-                <Link to="/checkout">Finalizar pedido</Link>
+                <Link to="/carrinho">Ver carrinho</Link>
               </Button>
             </div>
           </>

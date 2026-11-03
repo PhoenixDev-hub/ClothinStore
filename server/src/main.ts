@@ -1,4 +1,5 @@
 import helmet from '@fastify/helmet';
+import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -33,6 +34,7 @@ async function bootstrap() {
   await app.register(multipart, {
     limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
   });
+  await app.register(cookie);
 
   await app.register(helmet, { contentSecurityPolicy: false });
   app
@@ -47,7 +49,7 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  app.enableCors({ origin: corsOrigins });
+  app.enableCors({ origin: corsOrigins, credentials: true });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -63,6 +65,11 @@ async function bootstrap() {
       .setDescription('API do MVP da loja de roupas')
       .setVersion('1.0')
       .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'api-key')
+      .addCookieAuth(
+        'admin_session',
+        { type: 'apiKey', in: 'cookie' },
+        'admin-session',
+      )
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

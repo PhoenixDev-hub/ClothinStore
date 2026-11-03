@@ -1,3 +1,43 @@
+# API — Loja de Roupas
+
+## Segurança
+
+- **RLS não é a camada de autorização da API.** A API conecta via Prisma com a
+  role owner (`DATABASE_URL`), que ignora Row Level Security. As policies da
+  migration `20261027012210_ativar_rls` valem apenas para acesso direto via
+  PostgREST/`anon` no Supabase; a autorização real é feita nos controllers e no
+  `AdminApiKeyGuard`.
+- A migration de RLS só é aplicada quando as roles `anon` e `authenticated`
+  existem. Em Postgres local (docker-compose) ela é ignorada, para que um banco
+  limpo possa ser migrado sem erro.
+- O `docker-compose.yml` exige `POSTGRES_PASSWORD` no ambiente antes de iniciar
+  o Postgres. Use uma senha local forte e exclusiva; as portas de Postgres e
+  Redis ficam acessíveis apenas pelo próprio computador.
+- Ao alterar uma migration já aplicada, o Prisma acusa checksum divergente. Em
+  banco de desenvolvimento, recrie-o; em banco com dados, use
+  `prisma migrate resolve` conforme o caso.
+
+## Painel admin
+
+- O app separado fica em `admin/` e usa `VITE_API_URL` somente para a URL pública
+  da API. A chave `ADMIN_API_KEY` fica configurada apenas no servidor e é enviada
+  ao `POST /api/auth/admin` no momento do login; o servidor nunca a devolve.
+- O login valida a chave em tempo constante e cria uma sessão opaca no Redis por
+  oito horas. O cookie `admin_session` é `HttpOnly`, `Secure` e `SameSite=Strict`;
+  logout o revoga e limpa o cookie. As sessões falham fechadas se o Redis cair.
+- Configure `CORS_ORIGIN` como uma lista separada por vírgulas com cada origem
+  autorizada, incluindo a origem do painel. O padrão local inclui
+  `http://localhost:5174`; CORS permite credenciais somente para origens listadas.
+- Em produção, sirva painel e API em HTTPS e sob o mesmo site registrável para
+  que `SameSite=Strict` envie o cookie. Não coloque a chave em variáveis `VITE_*`.
+- Rotas de sessão: `POST /api/auth/admin`, `POST /api/auth/admin/logout` e
+  `GET /api/auth/admin/me`. O login aceita no máximo cinco tentativas por minuto
+  por IP. O contrato Swagger inclui autenticação por cookie e `x-api-key` em
+  `/api/docs` fora de produção.
+- O catálogo admin lê `GET /api/admin/products` e usa os endpoints existentes
+  `POST`, `PUT` e `DELETE /api/products`; categorias e upload usam
+  `/api/categories` e `/api/upload`.
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
