@@ -65,7 +65,10 @@ export class AdminAuthService implements OnModuleDestroy {
     try {
       return (await this.redis.get(this.sessionKey(token))) === '1';
     } catch {
-      return false;
+      // Redis fora do ar é falha de infraestrutura, não sessão inválida
+      throw new ServiceUnavailableException(
+        'Sessões admin indisponíveis no momento',
+      );
     }
   }
 

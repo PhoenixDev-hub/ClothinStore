@@ -4,8 +4,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  AdminAuthService,
   ADMIN_SESSION_TTL_SECONDS,
+  AdminAuthService,
 } from './admin-auth.service';
 
 describe('AdminAuthService', () => {
@@ -67,10 +67,12 @@ describe('AdminAuthService', () => {
     expect(redis.del).toHaveBeenCalledWith(`admin:session:${token}`);
   });
 
-  it('fails closed if the session store is unavailable', async () => {
+  it('reports session store unavailability instead of an invalid session', async () => {
     redis.get.mockRejectedValue(new Error('redis unavailable'));
 
-    await expect(service.isSessionValid('opaque-session')).resolves.toBe(false);
+    await expect(
+      service.isSessionValid('opaque-session'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('rejects an absent session token', async () => {

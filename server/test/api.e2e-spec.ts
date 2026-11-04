@@ -1,5 +1,9 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import cookie from '@fastify/cookie';
 import {
@@ -384,6 +388,20 @@ describe('Critical endpoints (e2e)', () => {
       expect(logout.headers['set-cookie']).toContain('HttpOnly');
       expect(logout.headers['set-cookie']).toContain('Secure');
       expect(logout.headers['set-cookie']).toContain('SameSite=Strict');
+    });
+
+    it('returns 503 when the session store is unavailable', async () => {
+      adminAuth.isSessionValid.mockRejectedValueOnce(
+        new ServiceUnavailableException('Sessões admin indisponíveis'),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/auth/admin/me',
+        headers: { cookie: `admin_session=${SESSION_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(503);
     });
   });
 

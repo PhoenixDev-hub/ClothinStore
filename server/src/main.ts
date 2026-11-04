@@ -45,7 +45,7 @@ async function bootstrap() {
       done();
     });
   const corsOrigins = configService
-    .get<string>('CORS_ORIGIN', 'http://localhost:5173')
+    .get<string>('CORS_ORIGIN', 'http://localhost:5173,http://localhost:5174')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
