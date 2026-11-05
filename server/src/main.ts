@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { CORS_METHODS } from './config/cors';
 import { MAX_IMAGE_BYTES } from './upload/upload.utils';
 
 async function bootstrap() {
@@ -49,7 +50,11 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  app.enableCors({ origin: corsOrigins, credentials: true });
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: CORS_METHODS,
+  });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({

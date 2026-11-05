@@ -18,6 +18,7 @@ import { CartService } from '../src/cart/cart.service';
 import { AdminApiKeyGuard } from '../src/common/guards/admin-api-key.guard';
 import { AdminAuthService } from '../src/auth/admin-auth.service';
 import { AdminAuthController } from '../src/auth/admin-auth.controller';
+import { CORS_METHODS } from '../src/config/cors';
 import { ProductStatus } from '../src/generated/prisma/client';
 import { HealthController } from '../src/health/health.controller';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -160,6 +161,7 @@ describe('Critical endpoints (e2e)', () => {
     app.enableCors({
       origin: ['http://localhost:5174'],
       credentials: true,
+      methods: CORS_METHODS,
     });
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
@@ -323,6 +325,26 @@ describe('Critical endpoints (e2e)', () => {
         'http://localhost:5174',
       );
       expect(response.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('allows the write methods used by the admin panel', async () => {
+      const response = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/products/7',
+        headers: {
+          origin: 'http://localhost:5174',
+          'access-control-request-method': 'PUT',
+          'access-control-request-headers': 'content-type,x-api-key',
+        },
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.headers['access-control-allow-methods']).toEqual(
+        expect.stringContaining('PUT'),
+      );
+      expect(response.headers['access-control-allow-methods']).toEqual(
+        expect.stringContaining('DELETE'),
+      );
     });
 
     it('sets an HttpOnly, Secure, SameSite=Strict eight-hour cookie on login', async () => {
