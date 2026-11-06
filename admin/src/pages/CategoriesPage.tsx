@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CirclePlus, Pencil, Trash2, X } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { CirclePlus, Link2, Pencil, Trash2, Upload, X } from 'lucide-react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorMessage } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import type { Category } from '@/types/api';
 
 interface CategoryForm {
@@ -47,6 +48,8 @@ export default function CategoriesPage() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [formError, setFormError] = useState('');
   const [pendingId, setPendingId] = useState<number | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const query = useQuery({
     queryKey: ['categories'],
     queryFn: async () => (await api.get<Category[]>('/categories')).data,
@@ -106,11 +109,40 @@ export default function CategoriesPage() {
     setFormError('');
   }
 
+  async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setFormError('Use uma imagem JPG, PNG ou WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFormError('A imagem deve ter no máximo 5 MB.');
+      return;
+    }
+
+    const body = new FormData();
+    body.append('file', file);
+    setUploading(true);
+    setFormError('');
+    try {
+      const response = await api.post<{ url: string }>('/admin/categories/upload', body);
+      update('image', response.data.url);
+      toast.success('Imagem enviada.');
+    } catch (error) {
+      setFormError(apiErrorMessage(error));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   function cancelForm() {
     setForm(emptyForm);
     setEditingId(null);
     setShowForm(false);
     setSlugEdited(false);
+    setShowUrlInput(false);
     setFormError('');
   }
 
@@ -192,10 +224,68 @@ export default function CategoriesPage() {
                 Slug
                 <Input id="category-slug" value={form.slug} onChange={(event) => { setSlugEdited(true); update('slug', event.target.value); }} required />
               </label>
-              <label className="field-label" htmlFor="category-image">
-                URL da imagem <span className="font-normal text-muted-foreground">(opcional)</span>
-                <Input id="category-image" type="url" value={form.image} onChange={(event) => update('image', event.target.value)} placeholder="https://…" />
-              </label>
+              <div className="grid gap-2 sm:col-span-2">
+                <span className="field-label">
+                  Imagem <span className="font-normal text-muted-foreground">(opcional)</span>
+                </span>
+                {form.image ? (
+                  <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
+                    <img
+                      src={form.image}
+                      alt="Imagem da categoria"
+                      className="size-20 shrink-0 rounded-lg border border-border object-cover"
+                    />
+                    <div className="flex flex-1 flex-wrap gap-2">
+                      <label className={cn(buttonVariants({ variant: 'secondary' }), 'relative cursor-pointer')}>
+                        <Upload aria-hidden="true" className="size-4" />
+                        {uploading ? 'Enviando…' : 'Trocar imagem'}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={uploadImage}
+                          disabled={uploading}
+                          aria-label="Escolher imagem"
+                        />
+                      </label>
+                      <Button type="button" variant="danger" onClick={() => update('image', '')}>
+                        <Trash2 aria-hidden="true" className="size-4" /> Remover
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <label className={cn(buttonVariants({ variant: 'secondary' }), 'relative cursor-pointer')}>
+                      <Upload aria-hidden="true" className="size-4" />
+                      {uploading ? 'Enviando…' : 'Escolher imagem'}
+                      <input
+                        type="file"
+                        className="sr-only"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={uploadImage}
+                        disabled={uploading}
+                        aria-label="Escolher imagem"
+                      />
+                    </label>
+                    <Button type="button" variant="ghost" onClick={() => setShowUrlInput((value) => !value)}>
+                      <Link2 aria-hidden="true" className="size-4" /> Colar URL manualmente
+                    </Button>
+                  </div>
+                )}
+                {showUrlInput && (
+                  <label className="field-label" htmlFor="category-image">
+                    URL da imagem
+                    <Input
+                      id="category-image"
+                      type="url"
+                      value={form.image}
+                      onChange={(event) => update('image', event.target.value)}
+                      placeholder="https://…"
+                    />
+                  </label>
+                )}
+                <p className="text-xs text-muted-foreground">JPG, PNG ou WebP, até 5 MB.</p>
+              </div>
               <label className="field-label" htmlFor="category-parent">
                 Categoria pai
                 <Select id="category-parent" value={form.parentId} onChange={(event) => update('parentId', event.target.value)}>
