@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Archive, CirclePlus, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Archive, CirclePlus, FileUp, Pencil, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
+import ImportProducts from '@/components/ImportProducts';
 import { api, apiErrorMessage } from '@/lib/api';
 import { formatCents } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ export default function ProductsPage() {
   const [status, setStatus] = useState<StatusFilter>('');
   const [page, setPage] = useState(1);
   const [pendingId, setPendingId] = useState<number | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const query = useQuery({
     queryKey: ['admin-products', status, page],
     queryFn: async () => {
@@ -89,12 +91,17 @@ export default function ProductsPage() {
             Gerencie o catálogo e as variantes da loja.
           </p>
         </div>
-        <Link
-          to="/produtos/novo"
-          className={cn(buttonVariants(), 'w-full text-white no-underline sm:w-auto')}
-        >
-          <CirclePlus aria-hidden="true" className="size-4" /> Novo produto
-        </Link>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setImportOpen(true)}>
+            <FileUp aria-hidden="true" className="size-4" /> Importar CSV
+          </Button>
+          <Link
+            to="/produtos/novo"
+            className={cn(buttonVariants(), 'w-full text-white no-underline sm:w-auto')}
+          >
+            <CirclePlus aria-hidden="true" className="size-4" /> Novo produto
+          </Link>
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-[minmax(180px,260px)_1fr] sm:items-end">
@@ -262,6 +269,29 @@ export default function ProductsPage() {
             </Button>
           </div>
         </nav>
+      )}
+
+      {importOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-products-title"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 id="import-products-title" className="text-lg font-semibold">Importar produtos via CSV</h2>
+              <Button variant="ghost" size="icon" aria-label="Fechar importação" onClick={() => setImportOpen(false)}>
+                <X aria-hidden="true" className="size-4" />
+              </Button>
+            </div>
+            <ImportProducts
+              onImported={() => {
+                void queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

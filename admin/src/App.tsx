@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { api, apiErrorMessage, isUnauthorizedError } from '@/lib/api';
 import type { AdminSession } from '@/types/api';
 import CategoriesPage from '@/pages/CategoriesPage';
+import ImportProductsPage from '@/pages/ImportProductsPage';
 import ProductEditorPage from '@/pages/ProductEditorPage';
 import ProductsPage from '@/pages/ProductsPage';
 
@@ -253,6 +254,7 @@ export default function App() {
           <Route index element={<Navigate to="/produtos" replace />} />
           <Route path="produtos" element={<ProductsPage />} />
           <Route path="produtos/novo" element={<ProductEditorPage />} />
+          <Route path="produtos/importar" element={<ImportProductsPage />} />
           <Route path="produtos/:id/editar" element={<ProductEditorPage />} />
           <Route path="categorias" element={<CategoriesPage />} />
         </Route>

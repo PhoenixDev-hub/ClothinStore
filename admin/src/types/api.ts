@@ -58,3 +58,8 @@ export interface AdminSession {
   authenticated: boolean;
 }
 
+export interface ImportReport {
+  criados: number;
+  erros: { linha: number; motivo: string }[];
+}
+
