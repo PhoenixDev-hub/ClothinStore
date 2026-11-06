@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminProductsController } from './admin-products.controller';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
+import { ProductImportService } from './product-import.service';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
 
@@ -11,7 +12,7 @@ import { ProductsService } from './products.service';
     AdminProductsController,
     CategoriesController,
   ],
-  providers: [ProductsService, CategoriesService],
+  providers: [ProductsService, CategoriesService, ProductImportService],
   exports: [ProductsService, CategoriesService],
 })
 export class ProductsModule {}

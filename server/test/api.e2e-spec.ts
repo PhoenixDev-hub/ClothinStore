@@ -28,6 +28,7 @@ import { CategoriesController } from '../src/products/categories.controller';
 import { CategoriesService } from '../src/products/categories.service';
 import { ProductsController } from '../src/products/products.controller';
 import { ProductsService } from '../src/products/products.service';
+import { ProductImportService } from '../src/products/product-import.service';
 import { CategoryUploadController } from '../src/upload/category-upload.controller';
 import { UploadService } from '../src/upload/upload.service';
 import { MAX_IMAGE_BYTES } from '../src/upload/upload.utils';
@@ -87,6 +88,24 @@ const draftProduct = {
   name: 'Rascunho',
   slug: 'rascunho',
   status: ProductStatus.DRAFT,
+};
+
+const csvMultipart = (content: string) => {
+  const boundary = '----opencode-csv-boundary';
+  const payload = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="products.csv"\r\nContent-Type: text/csv\r\n\r\n`,
+    ),
+    Buffer.from(content),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return {
+    payload,
+    headers: {
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+      'x-api-key': ADMIN_KEY,
+    },
+  };
 };
 
 const imageMultipart = () => {
@@ -173,6 +192,7 @@ describe('Critical endpoints (e2e)', () => {
         AppService,
         ProductsService,
         CategoriesService,
+        ProductImportService,
         CartService,
         AdminApiKeyGuard,
         {
@@ -680,6 +700,69 @@ describe('Critical endpoints (e2e)', () => {
 
       expect(response.statusCode).toBe(201);
       expect(response.json()).toMatchObject({ slug: 'camiseta' });
+    });
+  });
+
+  describe('POST /api/admin/products/import', () => {
+    const header = 'nome,descrição,preço,categoria,tamanho,cor,estoque,imagem';
+
+    it('returns 401 without credentials', async () => {
+      const { payload } = csvMultipart(
+        `${header}\nCamiseta,Desc,10,Camisetas,M,Branco,1,`,
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/products/import',
+        headers: {
+          'content-type':
+            'multipart/form-data; boundary=----opencode-csv-boundary',
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('imports valid rows and reports invalid ones', async () => {
+      prisma.category.findMany.mockResolvedValue([
+        { id: 1, name: 'Camisetas', slug: 'camisetas' },
+      ]);
+      prisma.product.create.mockClear();
+      prisma.product.create.mockResolvedValue(activeProduct);
+
+      const csv = [
+        header,
+        'Camiseta,Descrição,59.90,Camisetas,M,Branco,5,https://cdn/c.png',
+        'Sem categoria,Descrição,10,Inexistente,M,Branco,5,',
+      ].join('\n');
+      const { payload, headers } = csvMultipart(csv);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/products/import',
+        headers,
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        criados: 1,
+        erros: [{ linha: 3, motivo: 'Categoria "Inexistente" não encontrada' }],
+      });
+      expect(prisma.product.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 400 when required columns are missing', async () => {
+      const { payload, headers } = csvMultipart('nome,preço\nCamiseta,10');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/products/import',
+        headers,
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 
