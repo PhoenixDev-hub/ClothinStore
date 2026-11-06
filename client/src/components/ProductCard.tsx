@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { discountPercent, formatBRL } from "@/lib/utils";
+import { isSoldOut } from "@/lib/product";
 import { Swatch } from "./Swatch";
 import { Skeleton } from "./ui/skeleton";
 
@@ -15,6 +16,7 @@ const colorsOf = (product: Product) => {
 
 export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   const off = discountPercent(product.price, product.compareAtPrice);
+  const soldOut = isSoldOut(product);
   const image = product.images[0];
   return (
     <article className="group">
@@ -40,9 +42,11 @@ export function ProductCard({ product, priority = false }: { product: Product; p
             {product.isNew && (
               <span className="rounded-full bg-white px-2.5 py-1 text-sm font-semibold shadow-sm">Novidade</span>
             )}
-            {off > 0 && <span className="rounded-full bg-wine px-2.5 py-1 text-sm font-semibold text-white">-{off}%</span>}
-            {!product.inStock && (
-              <span className="rounded-full bg-ink px-2.5 py-1 text-sm font-semibold text-white">Esgotado</span>
+            {!soldOut && off > 0 && (
+              <span className="rounded-full bg-wine px-2.5 py-1 text-sm font-semibold text-white">-{off}%</span>
+            )}
+            {soldOut && (
+              <span className="rounded-full bg-neutral-600 px-2.5 py-1 text-sm font-semibold text-white">Esgotado</span>
             )}
           </div>
         </div>
@@ -59,10 +63,16 @@ export function ProductCard({ product, priority = false }: { product: Product; p
               <Swatch key={c.name} hex={c.hex} />
             ))}
           </div>
-          <span className="mt-3 flex min-h-11 items-center justify-between rounded-full border border-border px-4 text-sm font-medium transition-colors duration-200 group-hover:border-wine group-hover:text-wine">
-            Ver produto
-            <ArrowRight className="size-4" />
-          </span>
+          {soldOut ? (
+            <span className="mt-3 flex min-h-11 items-center justify-center rounded-full border border-border bg-muted px-4 text-sm font-medium text-muted-foreground">
+              Esgotado
+            </span>
+          ) : (
+            <span className="mt-3 flex min-h-11 items-center justify-between rounded-full border border-border px-4 text-sm font-medium transition-colors duration-200 group-hover:border-wine group-hover:text-wine">
+              Ver produto
+              <ArrowRight className="size-4" />
+            </span>
+          )}
         </div>
       </Link>
     </article>

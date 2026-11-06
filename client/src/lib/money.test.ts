@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBRL, lowestPrice, parseBRLToCents } from "./money";
+import { formatBRL, parseBRLToCents } from "./money";
 
 const plain = (value: string) => value.replace(/\u00A0/g, " ");
 

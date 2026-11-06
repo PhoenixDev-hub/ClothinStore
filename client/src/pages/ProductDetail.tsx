@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/store/cart";
 import { cn, discountPercent, formatBRL } from "@/lib/utils";
+import { isSoldOut } from "@/lib/product";
 import type { Variant } from "@/types";
 
 function Loading() {
@@ -70,7 +71,7 @@ export default function ProductDetail() {
   const colors = unique(sellable.filter((v) => v.size === size).map((v) => v.color));
   const color = colors.includes(selectedColor ?? "") ? selectedColor : colors.length === 1 ? colors[0] : undefined;
   const variant: Variant | undefined = sellable.find((v) => v.size === size && v.color === color);
-  const soldOut = !product.inStock || sellable.length === 0;
+  const soldOut = isSoldOut(product);
   const off = discountPercent(product.price, product.compareAtPrice);
   const maxQty = variant?.stock ?? 1;
   const currentImage = product.images[image] ?? product.images[0];
