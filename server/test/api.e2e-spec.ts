@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -23,8 +24,13 @@ import { ProductStatus } from '../src/generated/prisma/client';
 import { HealthController } from '../src/health/health.controller';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AdminProductsController } from '../src/products/admin-products.controller';
+import { CategoriesController } from '../src/products/categories.controller';
+import { CategoriesService } from '../src/products/categories.service';
 import { ProductsController } from '../src/products/products.controller';
 import { ProductsService } from '../src/products/products.service';
+import { CategoryUploadController } from '../src/upload/category-upload.controller';
+import { UploadService } from '../src/upload/upload.service';
+import { MAX_IMAGE_BYTES } from '../src/upload/upload.utils';
 
 jest.mock('@nestjs/cache-manager', () => ({
   CACHE_MANAGER: 'CACHE_MANAGER',
@@ -47,6 +53,13 @@ const adminAuth = {
   createSession: jest.fn().mockResolvedValue(SESSION_TOKEN),
   isSessionValid: jest.fn().mockResolvedValue(false),
   revokeSession: jest.fn(),
+};
+
+const uploadService = {
+  uploadImage: jest.fn().mockResolvedValue({
+    url: 'https://cdn.example.com/category.png',
+    path: '2026/11/category.png',
+  }),
 };
 
 const activeProduct = {
@@ -76,6 +89,25 @@ const draftProduct = {
   status: ProductStatus.DRAFT,
 };
 
+const imageMultipart = () => {
+  const boundary = '----opencode-test-boundary';
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const payload = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="category.png"\r\nContent-Type: image/png\r\n\r\n`,
+    ),
+    png,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return {
+    payload,
+    headers: {
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+      'x-api-key': ADMIN_KEY,
+    },
+  };
+};
+
 describe('Critical endpoints (e2e)', () => {
   let app: NestFastifyApplication;
   let prisma: {
@@ -87,6 +119,7 @@ describe('Critical endpoints (e2e)', () => {
       create: jest.Mock;
     };
     variant: { findMany: jest.Mock };
+    category: { findMany: jest.Mock };
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
   };
@@ -101,6 +134,7 @@ describe('Critical endpoints (e2e)', () => {
         create: jest.fn().mockResolvedValue(activeProduct),
       },
       variant: { findMany: jest.fn().mockResolvedValue([]) },
+      category: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest
         .fn()
         .mockImplementation((operations: Promise<unknown>[]) =>
@@ -130,17 +164,24 @@ describe('Critical endpoints (e2e)', () => {
         AdminAuthController,
         ProductsController,
         AdminProductsController,
+        CategoriesController,
+        CategoryUploadController,
         CartController,
         HealthController,
       ],
       providers: [
         AppService,
         ProductsService,
+        CategoriesService,
         CartService,
         AdminApiKeyGuard,
         {
           provide: AdminAuthService,
           useValue: adminAuth,
+        },
+        {
+          provide: UploadService,
+          useValue: uploadService,
         },
         { provide: PrismaService, useValue: prisma },
         {
@@ -158,6 +199,9 @@ describe('Critical endpoints (e2e)', () => {
       new FastifyAdapter(),
     );
     await app.register(cookie);
+    await app.register(multipart, {
+      limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
+    });
     app.enableCors({
       origin: ['http://localhost:5174'],
       credentials: true,
@@ -307,6 +351,67 @@ describe('Critical endpoints (e2e)', () => {
       expect(countCalls.at(-1)?.[0].where).toMatchObject({
         status: ProductStatus.DRAFT,
       });
+    });
+  });
+
+  describe('POST /api/admin/categories/upload', () => {
+    it('returns 401 without credentials', async () => {
+      const { payload, headers } = imageMultipart();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/categories/upload',
+        headers: { 'content-type': headers['content-type'] },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(uploadService.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('uploads an image and returns its public url', async () => {
+      uploadService.uploadImage.mockClear();
+      const { payload, headers } = imageMultipart();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/categories/upload',
+        headers,
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        url: 'https://cdn.example.com/category.png',
+      });
+      expect(uploadService.uploadImage).toHaveBeenCalledWith(
+        expect.any(Buffer),
+      );
+    });
+  });
+
+  describe('GET /api/categories', () => {
+    it('returns the category image in the public list', async () => {
+      prisma.category.findMany.mockResolvedValue([
+        {
+          id: 1,
+          name: 'Camisetas',
+          slug: 'camisetas',
+          image: 'https://cdn.example.com/category.png',
+        },
+      ]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/categories',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([
+        expect.objectContaining({
+          slug: 'camisetas',
+          image: 'https://cdn.example.com/category.png',
+        }),
+      ]);
     });
   });
 

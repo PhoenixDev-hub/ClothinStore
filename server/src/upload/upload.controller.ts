@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  PayloadTooLargeException,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { Controller, Post, Req } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -16,9 +10,9 @@ import {
 } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { Admin } from '../common/guards/decorators/admin.decorator';
+import { readMultipartFile } from '../common/multipart';
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { UploadService } from './upload.service';
-import { MAX_IMAGE_BYTES } from './upload.utils';
 
 @ApiTags('upload')
 @Controller('upload')
@@ -50,34 +44,6 @@ export class UploadController {
     description: 'Formato não suportado (use JPG, PNG ou WebP)',
   })
   async upload(@Req() req: FastifyRequest): Promise<UploadResponseDto> {
-    if (!req.isMultipart()) {
-      throw new BadRequestException(
-        'Envie multipart/form-data com o campo "file"',
-      );
-    }
-
-    const part = await req.file();
-    if (!part || part.fieldname !== 'file') {
-      throw new BadRequestException('Campo "file" é obrigatório');
-    }
-
-    let buffer: Buffer;
-    try {
-      buffer = await part.toBuffer();
-    } catch (e) {
-      if ((e as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
-        throw new PayloadTooLargeException(
-          `Arquivo excede ${MAX_IMAGE_BYTES / 1024 / 1024} MB`,
-        );
-      }
-      throw e;
-    }
-    if (part.file.truncated) {
-      throw new PayloadTooLargeException(
-        `Arquivo excede ${MAX_IMAGE_BYTES / 1024 / 1024} MB`,
-      );
-    }
-
-    return this.uploadService.uploadImage(buffer);
+    return this.uploadService.uploadImage(await readMultipartFile(req));
   }
 }
