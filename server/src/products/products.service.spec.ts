@@ -148,6 +148,34 @@ describe('ProductsService', () => {
 
       expect(result.data[0]).toMatchObject({ totalStock: 5, inStock: true });
     });
+
+    it('returns a zero-stock product as unavailable without dropping its variants', async () => {
+      prisma.product.count.mockResolvedValue(1);
+      prisma.product.findMany.mockResolvedValue([
+        productRow({
+          variants: [
+            {
+              sku: 'CAM-P-PRETO',
+              size: 'P',
+              color: 'Preto',
+              stock: 0,
+              available: true,
+            },
+          ],
+        }),
+      ]);
+
+      const result = await service.findAll(query());
+
+      expect(result.data[0]).toMatchObject({
+        totalStock: 0,
+        inStock: false,
+        available: false,
+      });
+      expect((result.data[0] as { variants: unknown[] }).variants).toHaveLength(
+        1,
+      );
+    });
   });
 
   describe('findOne', () => {

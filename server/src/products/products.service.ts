@@ -31,7 +31,12 @@ function withStock<
   const totalStock = product.variants
     .filter((v) => v.available)
     .reduce((sum, v) => sum + v.stock, 0);
-  return { ...product, totalStock, inStock: totalStock > 0 };
+  return {
+    ...product,
+    totalStock,
+    inStock: totalStock > 0,
+    available: totalStock > 0,
+  };
 }
 
 @Injectable()

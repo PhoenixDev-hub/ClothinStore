@@ -766,6 +766,103 @@ describe('Critical endpoints (e2e)', () => {
     });
   });
 
+  describe('produto esgotado', () => {
+    const soldOut = {
+      ...activeProduct,
+      variants: [
+        {
+          sku: 'CAM-M-BRANCO',
+          size: 'M',
+          color: 'Branco',
+          stock: 0,
+          available: true,
+        },
+      ],
+    };
+
+    it('returns the product with available:false and its variants', async () => {
+      prisma.product.findFirst.mockResolvedValue(soldOut);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/products/camiseta',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        slug: 'camiseta',
+        totalStock: 0,
+        inStock: false,
+        available: false,
+        variants: [expect.objectContaining({ sku: 'CAM-M-BRANCO' })],
+      });
+    });
+
+    it('blocks the cart quote with reason OUT_OF_STOCK', async () => {
+      prisma.variant.findMany.mockResolvedValue([
+        {
+          sku: 'CAM-M-BRANCO',
+          size: 'M',
+          color: 'Branco',
+          stock: 0,
+          available: true,
+          price: null,
+          product: {
+            name: 'Camiseta',
+            price: 5990,
+            status: ProductStatus.ACTIVE,
+          },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/cart/quote',
+        payload: { items: [{ sku: 'CAM-M-BRANCO', quantity: 1 }] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        availableItems: [],
+        items: [
+          {
+            available: false,
+            reason: 'OUT_OF_STOCK',
+            maxStock: 0,
+            message: 'Produto esgotado',
+          },
+        ],
+      });
+    });
+
+    it('blocks the WhatsApp link with a clear error', async () => {
+      prisma.variant.findMany.mockResolvedValue([
+        {
+          sku: 'CAM-M-BRANCO',
+          size: 'M',
+          color: 'Branco',
+          stock: 0,
+          available: true,
+          price: null,
+          product: {
+            name: 'Camiseta',
+            price: 5990,
+            status: ProductStatus.ACTIVE,
+          },
+        },
+      ]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/cart/whatsapp',
+        payload: { items: [{ sku: 'CAM-M-BRANCO', quantity: 1 }] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ message: 'Produto esgotado' });
+    });
+  });
+
   describe('GET /api/health', () => {
     it('returns 200', async () => {
       const response = await app.inject({ method: 'GET', url: '/api/health' });

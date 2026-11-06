@@ -96,6 +96,29 @@ describe('CartService', () => {
     });
   });
 
+  it('marks a zero-stock item as esgotado with a clear message', async () => {
+    prisma.variant.findMany.mockResolvedValue([variant({ stock: 0 })]);
+
+    const quote = await service.quote(items({ sku: 'CAM-M-BRANCO' }));
+
+    expect(quote.items[0]).toMatchObject({
+      available: false,
+      reason: 'OUT_OF_STOCK',
+      maxStock: 0,
+      subtotal: 0,
+      message: 'Produto esgotado',
+    });
+  });
+
+  it('refuses to build a WhatsApp link when every item is esgotado', async () => {
+    prisma.variant.findMany.mockResolvedValue([variant({ stock: 0 })]);
+    const quote = await service.quote(items({ sku: 'CAM-M-BRANCO' }));
+
+    expect(() => service.generateWhatsAppMessage(quote)).toThrow(
+      /Produto esgotado/,
+    );
+  });
+
   it('builds the WhatsApp message with available items only', async () => {
     prisma.variant.findMany.mockResolvedValue([
       variant(),

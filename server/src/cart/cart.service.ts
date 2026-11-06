@@ -81,6 +81,7 @@ export class CartService {
         available,
         maxStock: sellable ? variant.stock : 0,
         ...(reason ? { reason } : {}),
+        ...(reason === 'OUT_OF_STOCK' ? { message: 'Produto esgotado' } : {}),
       };
     });
 
@@ -106,7 +107,12 @@ export class CartService {
       throw new InternalServerErrorException('WHATSAPP_NUMBER não configurado');
     }
     if (quote.availableItems.length === 0) {
-      throw new BadRequestException('Nenhum item disponível para compra');
+      const esgotado = quote.items.some(
+        (item) => item.reason === 'OUT_OF_STOCK',
+      );
+      throw new BadRequestException(
+        esgotado ? 'Produto esgotado' : 'Nenhum item disponível para compra',
+      );
     }
 
     const lines = quote.availableItems.map(

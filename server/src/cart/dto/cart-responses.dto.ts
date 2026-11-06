@@ -49,6 +49,12 @@ export class QuoteItemDto {
 
   @ApiPropertyOptional({ enum: UNAVAILABLE_REASONS })
   reason?: UnavailableReason;
+
+  @ApiPropertyOptional({
+    description: 'Mensagem legível para o cliente',
+    example: 'Produto esgotado',
+  })
+  message?: string;
 }
 
 export class CartQuoteResponseDto {
