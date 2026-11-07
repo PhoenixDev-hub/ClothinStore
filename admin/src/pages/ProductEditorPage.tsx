@@ -11,6 +11,8 @@ import { Select } from '@/components/ui/select';
 import { api, apiErrorMessage } from '@/lib/api';
 import { formatCentsInput } from '@/lib/money';
 import {
+  colorNameToHex,
+  hexToColorName,
   serializeProductForm,
   type ProductFormValue,
   type ProductPayload,
@@ -55,6 +57,7 @@ function toFormValue(product: Product): ProductFormValue {
       sku: variant.sku,
       size: variant.size,
       color: variant.color,
+      colorHex: variant.colorHex ?? '',
       stock: String(variant.stock),
       available: variant.available,
     })),
@@ -377,11 +380,11 @@ export default function ProductEditorPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Variantes e estoque</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Cada combinação de tamanho e cor precisa de um SKU.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Cada combinação de tamanho e cor gera um SKU automaticamente quando o campo fica vazio.</p>
             </div>
             <Button
               variant="secondary"
-              onClick={() => update('variants', [...form.variants, { sku: '', size: '', color: '', stock: '0', available: true }])}
+              onClick={() => update('variants', [...form.variants, { sku: '', size: '', color: 'Preto', colorHex: '#111111', stock: '0', available: true }])}
             >
               <Plus aria-hidden="true" className="size-4" /> Adicionar variante
             </Button>
@@ -395,15 +398,30 @@ export default function ProductEditorPage() {
                   <legend className="sr-only">Variante {index + 1}</legend>
                   <label className="field-label">
                     SKU
-                    <Input value={variant.sku} onChange={(event) => updateVariant(index, { sku: event.target.value })} required />
+                    <Input value={variant.sku} placeholder="Automático" onChange={(event) => updateVariant(index, { sku: event.target.value })} />
                   </label>
                   <label className="field-label">
                     Tamanho
                     <Input value={variant.size} onChange={(event) => updateVariant(index, { size: event.target.value })} required />
                   </label>
-                  <label className="field-label">
+                  <label className="field-label" htmlFor={`variant-color-${index}`}>
                     Cor
-                    <Input value={variant.color} onChange={(event) => updateVariant(index, { color: event.target.value })} required />
+                    <span className="flex min-h-10 items-center gap-2">
+                      <input
+                        id={`variant-color-${index}`}
+                        type="color"
+                        title="Cor exibida na loja"
+                        value={variant.colorHex || colorNameToHex(variant.color) || '#111111'}
+                        onChange={(event) => {
+                          const colorHex = event.target.value;
+                          updateVariant(index, { colorHex, color: hexToColorName(colorHex) });
+                        }}
+                        className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-input bg-white p-1"
+                      />
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {variant.color || 'Escolha uma cor'}
+                      </span>
+                    </span>
                   </label>
                   <label className="field-label">
                     Estoque

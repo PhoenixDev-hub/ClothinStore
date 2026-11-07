@@ -38,7 +38,8 @@ describe('ProductsService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
-    variant: { deleteMany: jest.Mock };
+    variant: { deleteMany: jest.Mock; findUnique: jest.Mock };
+    category: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let cache: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
@@ -60,7 +61,11 @@ describe('ProductsService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
-      variant: { deleteMany: jest.fn() },
+      variant: {
+        deleteMany: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      category: { findUnique: jest.fn().mockResolvedValue({ slug: 'cam' }) },
       $transaction: jest
         .fn()
         .mockImplementation((operations: Promise<unknown>[]) =>
@@ -245,6 +250,105 @@ describe('ProductsService', () => {
   });
 
   describe('write operations', () => {
+    it('marks a newly created product as new when isNew is omitted', async () => {
+      prisma.product.create.mockResolvedValue(productRow({ slug: 'nova' }));
+
+      await service.create({ slug: 'nova' } as CreateProductDto);
+
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isNew: true }) as unknown,
+        }) as unknown,
+      );
+    });
+
+    it('keeps an explicit isNew value', async () => {
+      prisma.product.create.mockResolvedValue(productRow({ slug: 'nova' }));
+
+      await service.create({ slug: 'nova', isNew: false } as CreateProductDto);
+
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isNew: false }) as unknown,
+        }) as unknown,
+      );
+    });
+
+    it('generates a normalized SKU when a variant does not provide one', async () => {
+      prisma.product.create.mockResolvedValue(
+        productRow({
+          slug: 'ts001',
+          variants: [
+            { sku: 'CAM-TS001-CAFE-CLARO-M', stock: 0, available: true },
+          ],
+        }),
+      );
+
+      await service.create({
+        name: 'Camiseta',
+        slug: 'ts001',
+        categoryId: 1,
+        variants: [{ color: 'Café Claro', size: 'M' }],
+      } as CreateProductDto);
+
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            variants: {
+              create: [
+                expect.objectContaining({ sku: 'CAM-TS001-CAFE-CLARO-M' }),
+              ],
+            },
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('preserves a manually provided SKU', async () => {
+      prisma.product.create.mockResolvedValue(productRow({ slug: 'ts001' }));
+
+      await service.create({
+        name: 'Camiseta',
+        slug: 'ts001',
+        categoryId: 1,
+        variants: [{ sku: 'MEU-SKU', color: 'Preto', size: 'M' }],
+      } as CreateProductDto);
+
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            variants: { create: [expect.objectContaining({ sku: 'MEU-SKU' })] },
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('uses the next numeric suffix when an automatic SKU already exists', async () => {
+      prisma.variant.findUnique
+        .mockResolvedValueOnce({ id: 8 })
+        .mockResolvedValueOnce(null);
+      prisma.product.create.mockResolvedValue(productRow({ slug: 'ts001' }));
+
+      await service.create({
+        name: 'Camiseta',
+        slug: 'ts001',
+        categoryId: 1,
+        variants: [{ color: 'Branco', size: 'M' }],
+      } as CreateProductDto);
+
+      expect(prisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            variants: {
+              create: [
+                expect.objectContaining({ sku: 'CAM-TS001-BRANCO-M-2' }),
+              ],
+            },
+          }) as unknown,
+        }),
+      );
+    });
+
     it('invalidates the list cache on create', async () => {
       prisma.product.create.mockResolvedValue(productRow({ slug: 'nova' }));
 

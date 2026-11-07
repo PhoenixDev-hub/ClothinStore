@@ -17,10 +17,11 @@ import {
 } from 'class-validator';
 
 export class CreateVariantDto {
-  @ApiProperty({ example: 'CAM-BAS-P-BRANCO' })
+  @ApiPropertyOptional({ example: 'CAM-BAS-P-BRANCO' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  sku: string;
+  sku?: string;
 
   @ApiProperty({ example: 'M' })
   @IsString()
@@ -117,7 +118,7 @@ export class CreateProductDto {
   @IsEnum(ProductStatus)
   status?: ProductStatus;
 
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   isNew?: boolean;

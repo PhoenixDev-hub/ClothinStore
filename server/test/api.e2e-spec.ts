@@ -137,7 +137,7 @@ describe('Critical endpoints (e2e)', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
     };
-    variant: { findMany: jest.Mock };
+    variant: { findMany: jest.Mock; findUnique: jest.Mock };
     category: { findMany: jest.Mock };
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
@@ -152,7 +152,10 @@ describe('Critical endpoints (e2e)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(activeProduct),
       },
-      variant: { findMany: jest.fn().mockResolvedValue([]) },
+      variant: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       category: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest
         .fn()

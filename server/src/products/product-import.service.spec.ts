@@ -3,12 +3,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductImportService } from './product-import.service';
 
-const HEADER = 'nome,descrição,preço,categoria,tamanho,cor,estoque,imagem';
+const HEADER = 'nome,descrição,preço,categoria,tamanho,cor,estoque,imagem,sku';
 
 describe('ProductImportService', () => {
   let service: ProductImportService;
   let prisma: {
     category: { findMany: jest.Mock };
+    variant: { findUnique: jest.Mock };
     product: { create: jest.Mock };
   };
 
@@ -17,8 +18,9 @@ describe('ProductImportService', () => {
       category: {
         findMany: jest
           .fn()
-          .mockResolvedValue([{ id: 1, name: 'Camisetas', slug: 'camisetas' }]),
+          .mockResolvedValue([{ id: 1, name: 'Camisetas', slug: 'cam' }]),
       },
+      variant: { findUnique: jest.fn().mockResolvedValue(null) },
       product: { create: jest.fn().mockResolvedValue({ id: 1 }) },
     };
 
@@ -35,7 +37,7 @@ describe('ProductImportService', () => {
   it('creates a product and one variant for a valid row', async () => {
     const csv = [
       HEADER,
-      'Camiseta Básica,Camiseta de algodão,59.90,Camisetas,M,Branco,5,https://cdn/c.png',
+      'Camiseta Básica,Camiseta de algodão,59.90,Camisetas,M,Branco,5,https://cdn/c.png,',
     ].join('\n');
 
     const result = await service.import(csv);
@@ -50,10 +52,11 @@ describe('ProductImportService', () => {
         images: ['https://cdn/c.png'],
         categoryId: 1,
         status: 'ACTIVE',
+        isNew: true,
         variants: {
           create: [
             {
-              sku: 'CAMISETA-BASICA-M-BRANCO',
+              sku: 'CAM-CAMISETA-BASICA-BRANCO-M',
               size: 'M',
               color: 'Branco',
               stock: 5,
@@ -62,6 +65,73 @@ describe('ProductImportService', () => {
         },
       },
     });
+  });
+
+  it('respects a manually supplied SKU in the CSV', async () => {
+    const csv = [
+      HEADER,
+      'Camiseta Básica,Descrição,59.90,Camisetas,M,Branco,5,,MANUAL-001',
+    ].join('\n');
+
+    await service.import(csv);
+
+    expect(prisma.product.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          variants: {
+            create: [expect.objectContaining({ sku: 'MANUAL-001' })],
+          },
+        }) as unknown,
+      }),
+    );
+  });
+
+  it('generates a SKU when the CSV header omits the optional SKU column', async () => {
+    const csv = [
+      'nome,descrição,preço,categoria,tamanho,cor,estoque,imagem',
+      'Camiseta Básica,Descrição,59.90,Camisetas,M,Branco,5,',
+    ].join('\n');
+
+    await service.import(csv);
+
+    expect(prisma.product.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          variants: {
+            create: [
+              expect.objectContaining({ sku: 'CAM-CAMISETA-BASICA-BRANCO-M' }),
+            ],
+          },
+        }) as unknown,
+      }),
+    );
+  });
+
+  it('adds the first available numeric suffix when an automatic SKU is taken', async () => {
+    prisma.variant.findUnique
+      .mockResolvedValueOnce({ sku: 'CAM-CAMISETA-BASICA-BRANCO-M' })
+      .mockResolvedValueOnce({ sku: 'CAM-CAMISETA-BASICA-BRANCO-M-2' })
+      .mockResolvedValueOnce(null);
+    const csv = [
+      HEADER,
+      'Camiseta Básica,Descrição,59.90,Camisetas,M,Branco,5,,',
+    ].join('\n');
+
+    await service.import(csv);
+
+    expect(prisma.product.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          variants: {
+            create: [
+              expect.objectContaining({
+                sku: 'CAM-CAMISETA-BASICA-BRANCO-M-3',
+              }),
+            ],
+          },
+        }) as unknown,
+      }),
+    );
   });
 
   it('accepts comma prices, empty stock and accented-less headers', async () => {

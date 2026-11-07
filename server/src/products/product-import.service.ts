@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ProductStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseCsv } from './csv';
+import { findAvailableSku, variantSkuBase } from './sku';
 
 const REQUIRED_COLUMNS = [
   'nome',
@@ -79,9 +80,11 @@ export class ProductImportService {
       select: { id: true, name: true, slug: true },
     });
     const categoryByName = new Map<string, number>();
+    const categorySlugById = new Map<number, string>();
     for (const category of categories) {
       categoryByName.set(normalize(category.name), category.id);
       categoryByName.set(normalize(category.slug), category.id);
+      categorySlugById.set(category.id, category.slug);
     }
 
     const erros: ImportError[] = [];
@@ -102,6 +105,7 @@ export class ProductImportService {
       const color = cell('cor');
       const stockValue = cell('estoque');
       const image = cell('imagem');
+      const manualSku = cell('sku');
 
       const reason = this.validate({
         name,
@@ -120,7 +124,24 @@ export class ProductImportService {
       }
 
       const slug = slugify(name);
-      const sku = `${slug}-${slugify(size)}-${slugify(color)}`.toUpperCase();
+      const categoryId = categoryByName.get(normalize(categoryName)) as number;
+      const sku =
+        manualSku ||
+        (await findAvailableSku(
+          variantSkuBase(
+            categorySlugById.get(categoryId) ?? '',
+            slug,
+            color,
+            size,
+          ),
+          async (candidate) =>
+            Boolean(
+              await this.prisma.variant.findUnique({
+                where: { sku: candidate },
+                select: { id: true },
+              }),
+            ),
+        ));
       const stock = stockValue ? Number(stockValue) : 0;
 
       try {
@@ -131,8 +152,9 @@ export class ProductImportService {
             description,
             price: price as number,
             images: image ? [image] : [],
-            categoryId: categoryByName.get(normalize(categoryName)) as number,
+            categoryId,
             status: ProductStatus.ACTIVE,
+            isNew: true,
             variants: { create: [{ sku, size, color, stock }] },
           },
         });
