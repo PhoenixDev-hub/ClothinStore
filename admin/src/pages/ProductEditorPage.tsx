@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorMessage } from '@/lib/api';
@@ -72,6 +73,7 @@ export default function ProductEditorPage() {
   const [imageUrl, setImageUrl] = useState('');
   const [formError, setFormError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [pendingArchive, setPendingArchive] = useState<ProductPayload | null>(null);
 
   const productQuery = useQuery({
     queryKey: ['admin-product', productId],
@@ -102,7 +104,11 @@ export default function ProductEditorPage() {
       ]);
       if (!isEditing) navigate(`/produtos/${product.id}/editar`, { replace: true });
     },
-    onError: (error) => setFormError(apiErrorMessage(error)),
+    onError: (error) => {
+      const message = apiErrorMessage(error);
+      setFormError(message);
+      toast.error(message);
+    },
   });
 
   function update<K extends keyof ProductFormValue>(key: K, value: ProductFormValue[K]) {
@@ -168,19 +174,22 @@ export default function ProductEditorPage() {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError('');
+    let payload: ProductPayload;
+    try {
+      payload = serializeProductForm(form);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Confira os dados do produto.');
+      return;
+    }
     if (
       productQuery.data &&
       productQuery.data.status !== 'ARCHIVED' &&
-      form.status === 'ARCHIVED' &&
-      !window.confirm(`Deseja arquivar “${productQuery.data.name}”?`)
+      form.status === 'ARCHIVED'
     ) {
+      setPendingArchive(payload);
       return;
     }
-    try {
-      saveMutation.mutate(serializeProductForm(form));
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Confira os dados do produto.');
-    }
+    saveMutation.mutate(payload);
   }
 
   if (isEditing && !validProductId) {
@@ -425,6 +434,20 @@ export default function ProductEditorPage() {
           </Button>
         </footer>
       </form>
+
+      <ConfirmDialog
+        open={Boolean(pendingArchive)}
+        title="Arquivar produto?"
+        description={productQuery.data ? `Deseja arquivar “${productQuery.data.name}”?` : undefined}
+        confirmLabel="Arquivar"
+        tone="danger"
+        pending={saveMutation.isPending}
+        onCancel={() => setPendingArchive(null)}
+        onConfirm={() => {
+          if (pendingArchive) saveMutation.mutate(pendingArchive);
+          setPendingArchive(null);
+        }}
+      />
     </div>
   );
 }

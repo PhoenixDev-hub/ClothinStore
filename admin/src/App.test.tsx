@@ -100,7 +100,6 @@ describe('admin routes', () => {
                 },
       })) as never,
     );
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const updateProduct = vi.spyOn(api, 'put');
 
     renderAt('/produtos/3/editar');
@@ -108,7 +107,9 @@ describe('admin routes', () => {
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ARCHIVED' } });
     fireEvent.submit(saveButton.closest('form')!);
 
-    expect(confirm).toHaveBeenCalledWith('Deseja arquivar “Camiseta”?');
+    expect(await screen.findByRole('dialog', { name: 'Arquivar produto?' })).toBeVisible();
+    expect(updateProduct).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(updateProduct).not.toHaveBeenCalled();
   });
 });

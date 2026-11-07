@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Boxes,
+  FileUp,
+  LayoutDashboard,
   Layers3,
   LogOut,
   Shirt,
@@ -22,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { api, apiErrorMessage, isUnauthorizedError } from '@/lib/api';
 import type { AdminSession } from '@/types/api';
 import CategoriesPage from '@/pages/CategoriesPage';
+import DashboardPage from '@/pages/DashboardPage';
 import ImportProductsPage from '@/pages/ImportProductsPage';
 import ProductEditorPage from '@/pages/ProductEditorPage';
 import ProductsPage from '@/pages/ProductsPage';
@@ -84,7 +87,7 @@ function AppShell() {
     <div className="min-h-screen md:flex">
       <aside className="flex shrink-0 flex-col bg-[#171414] text-white md:sticky md:top-0 md:h-screen md:w-60">
         <Link
-          to="/produtos"
+          to="/dashboard"
           className="flex h-[76px] items-center gap-3 border-b border-white/10 px-6 text-white no-underline"
         >
           <span className="grid size-9 place-items-center rounded-lg bg-wine text-white">
@@ -96,11 +99,19 @@ function AppShell() {
           </span>
         </Link>
 
-        <nav aria-label="Navegação principal" className="flex gap-1 p-3 md:flex-1 md:flex-col md:py-5">
+        <nav aria-label="Navegação principal" className="flex gap-1 overflow-x-auto p-3 md:flex-1 md:flex-col md:py-5">
+          <NavLink
+            to="/dashboard"
+            className={({ isActive }) =>
+              `flex min-h-10 flex-1 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
+            }
+          >
+            <LayoutDashboard aria-hidden="true" className="size-4" /> Dashboard
+          </NavLink>
           <NavLink
             to="/produtos"
             className={({ isActive }) =>
-              `flex min-h-10 flex-1 items-center gap-3 rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
+              `flex min-h-10 flex-1 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
             }
           >
             <Boxes aria-hidden="true" className="size-4" /> Produtos
@@ -108,10 +119,18 @@ function AppShell() {
           <NavLink
             to="/categorias"
             className={({ isActive }) =>
-              `flex min-h-10 flex-1 items-center gap-3 rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
+              `flex min-h-10 flex-1 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
             }
           >
             <Layers3 aria-hidden="true" className="size-4" /> Categorias
+          </NavLink>
+          <NavLink
+            to="/produtos/importar"
+            className={({ isActive }) =>
+              `flex min-h-10 flex-1 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-sm no-underline transition-colors md:flex-none ${isActive ? 'bg-white/10 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`
+            }
+          >
+            <FileUp aria-hidden="true" className="size-4" /> Importar
           </NavLink>
         </nav>
 
@@ -164,7 +183,7 @@ function LoginRoute() {
       await api.post('/auth/admin', { apiKey });
       queryClient.setQueryData(['admin-session'], { authenticated: true });
       setApiKey('');
-      navigate('/produtos', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       setErrorMessage(
         errorMessageForLogin(error),
@@ -251,7 +270,8 @@ export default function App() {
       <Route path="/login" element={<LoginRoute />} />
       <Route element={<SessionBoundary />}>
         <Route element={<AppShell />}>
-          <Route index element={<Navigate to="/produtos" replace />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="produtos" element={<ProductsPage />} />
           <Route path="produtos/novo" element={<ProductEditorPage />} />
           <Route path="produtos/importar" element={<ImportProductsPage />} />
@@ -259,7 +279,7 @@ export default function App() {
           <Route path="categorias" element={<CategoriesPage />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/produtos" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

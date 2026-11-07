@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CirclePlus, Link2, Pencil, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CirclePlus, Link2, Pencil, Search, Trash2, Upload, X } from 'lucide-react';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorMessage } from '@/lib/api';
+import { paginate } from '@/lib/catalog';
 import { cn } from '@/lib/utils';
 import type { Category } from '@/types/api';
 
@@ -30,6 +32,8 @@ const emptyForm: CategoryForm = {
   parentId: '',
 };
 
+const PAGE_SIZE = 20;
+
 function slugify(value: string) {
   return value
     .normalize('NFD')
@@ -47,9 +51,12 @@ export default function CategoriesPage() {
   const [showForm, setShowForm] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
   const [formError, setFormError] = useState('');
-  const [pendingId, setPendingId] = useState<number | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const query = useQuery({
     queryKey: ['categories'],
     queryFn: async () => (await api.get<Category[]>('/categories')).data,
@@ -76,20 +83,24 @@ export default function CategoriesPage() {
       setSlugEdited(false);
       await queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
-    onError: (error) => setFormError(apiErrorMessage(error)),
+    onError: (error) => {
+      const message = apiErrorMessage(error);
+      setFormError(message);
+      toast.error(message);
+    },
   });
 
   async function removeCategory(category: Category) {
-    if (!window.confirm(`Excluir a categoria “${category.name}”?`)) return;
-    setPendingId(category.id);
+    setDeleting(true);
     try {
       await api.delete(`/categories/${category.id}`);
       toast.success('Categoria excluída.');
       await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setPendingDelete(null);
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
-      setPendingId(null);
+      setDeleting(false);
     }
   }
 
@@ -183,6 +194,13 @@ export default function CategoriesPage() {
   }
 
   const categories = query.data ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
+  const filteredCategories = normalizedSearch
+    ? categories.filter((category) => category.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
+    : categories;
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageCategories = paginate(filteredCategories, currentPage, PAGE_SIZE);
 
   return (
     <div className="grid gap-6">
@@ -197,6 +215,31 @@ export default function CategoriesPage() {
           </Button>
         )}
       </div>
+
+      <section className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <label className="field-label w-full sm:max-w-sm" htmlFor="category-search">
+          Buscar categoria
+          <span className="relative block">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="category-search"
+              type="search"
+              className="pl-9"
+              placeholder="Nome da categoria"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+            />
+          </span>
+        </label>
+        {query.data && (
+          <p className="text-sm text-muted-foreground sm:pb-2">
+            {filteredCategories.length} {filteredCategories.length === 1 ? 'categoria' : 'categorias'}
+          </p>
+        )}
+      </section>
 
       {showForm && (
         <form onSubmit={submit} className="overflow-hidden rounded-xl border border-border bg-white">
@@ -331,11 +374,13 @@ export default function CategoriesPage() {
               <Button className="mt-4" variant="secondary" onClick={() => void query.refetch()}>Tentar novamente</Button>
             </div>
           </div>
-        ) : categories.length === 0 ? (
+        ) : filteredCategories.length === 0 ? (
           <div className="grid min-h-56 place-items-center px-6 text-center">
             <div>
-              <p className="font-semibold">Nenhuma categoria cadastrada.</p>
-              <p className="mt-1 text-sm text-muted-foreground">Crie categorias para organizar os produtos da loja.</p>
+              <p className="font-semibold">{categories.length === 0 ? 'Nenhuma categoria cadastrada.' : 'Nenhuma categoria encontrada.'}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {categories.length === 0 ? 'Crie categorias para organizar os produtos da loja.' : 'Tente outro nome na busca.'}
+              </p>
             </div>
           </div>
         ) : (
@@ -352,7 +397,7 @@ export default function CategoriesPage() {
                 </tr>
               </thead>
               <tbody>
-                {categories.map((category) => (
+                {pageCategories.map((category) => (
                   <tr key={category.id}>
                     <td>
                       <p className="font-semibold">{category.name}</p>
@@ -366,7 +411,7 @@ export default function CategoriesPage() {
                         <Button variant="ghost" size="icon" aria-label={`Editar ${category.name}`} title="Editar categoria" onClick={() => startEditing(category)}>
                           <Pencil aria-hidden="true" className="size-4" />
                         </Button>
-                        <Button variant="danger" size="icon" aria-label={`Excluir ${category.name}`} title="Excluir categoria" disabled={pendingId === category.id} onClick={() => void removeCategory(category)}>
+                        <Button variant="danger" size="icon" aria-label={`Excluir ${category.name}`} title="Excluir categoria" disabled={deleting} onClick={() => setPendingDelete(category)}>
                           <Trash2 aria-hidden="true" className="size-4" />
                         </Button>
                       </div>
@@ -378,6 +423,33 @@ export default function CategoriesPage() {
           </div>
         )}
       </section>
+
+      {!query.isPending && !query.isError && filteredCategories.length > PAGE_SIZE && (
+        <nav aria-label="Paginação de categorias" className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)}>
+              <ArrowLeft aria-hidden="true" className="size-4" /> Anterior
+            </Button>
+            <Button variant="secondary" size="sm" disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)}>
+              Próxima <ArrowRight aria-hidden="true" className="size-4" />
+            </Button>
+          </div>
+        </nav>
+      )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Excluir categoria?"
+        description={pendingDelete ? `Excluir a categoria “${pendingDelete.name}”? Esta ação não pode ser desfeita.` : undefined}
+        confirmLabel="Excluir"
+        tone="danger"
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) void removeCategory(pendingDelete);
+        }}
+      />
     </div>
   );
 }

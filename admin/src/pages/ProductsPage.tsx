@@ -1,22 +1,31 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Archive, CirclePlus, FileUp, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Archive, CirclePlus, FileUp, Pencil, Search, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import ImportProducts from '@/components/ImportProducts';
 import { api, apiErrorMessage } from '@/lib/api';
 import { fetchAllAdminProducts } from '@/lib/admin-products';
-import { filterProducts, paginate } from '@/lib/catalog';
+import { filterProducts, paginate, sortProducts, type ProductSort } from '@/lib/catalog';
 import { formatCents } from '@/lib/money';
 import { stockState } from '@/lib/stock';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types/api';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 type StatusFilter = '' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+
+interface PendingAction {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
+}
 
 function statusLabel(status: Product['status']) {
   return {
@@ -36,52 +45,78 @@ function statusVariant(status: Product['status']) {
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ProductSort>('name-asc');
   const [status, setStatus] = useState<StatusFilter>('');
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
   const [page, setPage] = useState(1);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const query = useQuery({
     queryKey: ['admin-products', 'all'],
     queryFn: fetchAllAdminProducts,
   });
 
-  async function changeStatus(product: Product, nextStatus: Product['status']) {
+  function changeStatus(product: Product, nextStatus: Product['status']) {
     const action = nextStatus === 'ARCHIVED' ? 'arquivar' : 'reativar';
-    if (!window.confirm(`Deseja ${action} “${product.name}”?`)) return;
-
-    setPendingId(product.id);
-    try {
-      await api.put(`/products/${product.id}`, { status: nextStatus });
-      toast.success(nextStatus === 'ARCHIVED' ? 'Produto arquivado.' : 'Produto reativado.');
-      await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-    } catch (error) {
-      toast.error(apiErrorMessage(error));
-    } finally {
-      setPendingId(null);
-    }
+    setPendingAction({
+      title: nextStatus === 'ARCHIVED' ? 'Arquivar produto?' : 'Reativar produto?',
+      description: `Deseja ${action} “${product.name}”?`,
+      confirmLabel: nextStatus === 'ARCHIVED' ? 'Arquivar' : 'Reativar',
+      run: async () => {
+        setPendingId(product.id);
+        try {
+          await api.put(`/products/${product.id}`, { status: nextStatus });
+          toast.success(nextStatus === 'ARCHIVED' ? 'Produto arquivado.' : 'Produto reativado.');
+          await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+        } catch (error) {
+          toast.error(apiErrorMessage(error));
+        } finally {
+          setPendingId(null);
+        }
+      },
+    });
   }
 
-  async function removeProduct(product: Product) {
-    if (!window.confirm(`Excluir “${product.name}” e todas as suas variantes?`)) return;
+  function removeProduct(product: Product) {
+    setPendingAction({
+      title: 'Excluir produto?',
+      description: `Excluir “${product.name}” e todas as suas variantes? Esta ação não pode ser desfeita.`,
+      confirmLabel: 'Excluir',
+      run: async () => {
+        setPendingId(product.id);
+        try {
+          await api.delete(`/products/${product.id}`);
+          toast.success('Produto excluído.');
+          await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+        } catch (error) {
+          toast.error(apiErrorMessage(error));
+        } finally {
+          setPendingId(null);
+        }
+      },
+    });
+  }
 
-    setPendingId(product.id);
+  async function runPendingAction() {
+    if (!pendingAction) return;
+    setConfirming(true);
     try {
-      await api.delete(`/products/${product.id}`);
-      toast.success('Produto excluído.');
-      await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-    } catch (error) {
-      toast.error(apiErrorMessage(error));
+      await pendingAction.run();
+      setPendingAction(null);
     } finally {
-      setPendingId(null);
+      setConfirming(false);
     }
   }
 
   const products = query.data ?? [];
-  const filtered = filterProducts(products, { status, onlyOutOfStock });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const filtered = filterProducts(products, { search, status, onlyOutOfStock });
+  const sorted = sortProducts(filtered, sort);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageProducts = paginate(filtered, currentPage, PAGE_SIZE);
+  const pageProducts = paginate(sorted, currentPage, PAGE_SIZE);
 
   return (
     <div className="grid gap-6">
@@ -105,8 +140,25 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <section className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="field-label sm:max-w-[260px]" htmlFor="product-status">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(160px,210px)_minmax(160px,210px)_auto] xl:items-end">
+        <label className="field-label" htmlFor="product-search">
+          Buscar produto
+          <span className="relative block">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="product-search"
+              type="search"
+              className="pl-9"
+              placeholder="Nome do produto"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+            />
+          </span>
+        </label>
+        <label className="field-label" htmlFor="product-status">
           Status
           <Select
             id="product-status"
@@ -122,9 +174,28 @@ export default function ProductsPage() {
             <option value="ARCHIVED">Arquivado</option>
           </Select>
         </label>
+        <label className="field-label" htmlFor="product-sort">
+          Ordenar por
+          <Select
+            id="product-sort"
+            value={sort}
+            onChange={(event) => {
+              setSort(event.target.value as ProductSort);
+              setPage(1);
+            }}
+          >
+            <option value="name-asc">Nome (A–Z)</option>
+            <option value="name-desc">Nome (Z–A)</option>
+            <option value="price-asc">Preço (menor)</option>
+            <option value="price-desc">Preço (maior)</option>
+            <option value="stock-asc">Estoque (menor)</option>
+            <option value="stock-desc">Estoque (maior)</option>
+          </Select>
+        </label>
         <Button
           variant={onlyOutOfStock ? 'primary' : 'secondary'}
           aria-pressed={onlyOutOfStock}
+          className="w-full xl:w-auto"
           onClick={() => {
             setOnlyOutOfStock((value) => !value);
             setPage(1);
@@ -132,12 +203,13 @@ export default function ProductsPage() {
         >
           <Archive aria-hidden="true" className="size-4" /> Mostrar só esgotados
         </Button>
-        {query.data && (
-          <p className="text-sm text-muted-foreground sm:ml-auto sm:pb-2">
-            {filtered.length} {filtered.length === 1 ? 'produto' : 'produtos'}
-          </p>
-        )}
       </section>
+
+      {query.data && (
+        <p className="text-sm text-muted-foreground">
+          {sorted.length} {sorted.length === 1 ? 'produto' : 'produtos'}
+        </p>
+      )}
 
       <section className="overflow-hidden rounded-xl border border-border bg-white" aria-busy={query.isPending}>
         {query.isPending ? (
@@ -310,6 +382,17 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.title ?? ''}
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.confirmLabel === 'Reativar' ? 'primary' : 'danger'}
+        pending={confirming}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => void runPendingAction()}
+      />
     </div>
   );
 }

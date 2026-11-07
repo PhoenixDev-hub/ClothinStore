@@ -63,7 +63,7 @@ export default function ImportProducts({ onImported }: ImportProductsProps) {
       </label>
 
       <p className="text-sm text-muted-foreground">
-        Colunas: nome, descrição, preço, categoria, tamanho, cor, estoque, imagem.
+        Colunas: nome, descrição, preço, categoria, tamanho, cor, estoque, imagem (sku opcional).
       </p>
 
       <div className="flex flex-col gap-2 sm:flex-row">
