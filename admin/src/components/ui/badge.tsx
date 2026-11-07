@@ -11,6 +11,7 @@ const badgeVariants = cva(
         active: 'bg-green-soft text-green-ink',
         archived: 'bg-muted text-muted-foreground',
         neutral: 'bg-accent text-accent-foreground',
+        out: 'bg-red-50 text-destructive',
       },
     },
     defaultVariants: { variant: 'neutral' },

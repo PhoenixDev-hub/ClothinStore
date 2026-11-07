@@ -8,9 +8,12 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import ImportProducts from '@/components/ImportProducts';
 import { api, apiErrorMessage } from '@/lib/api';
+import { fetchAllAdminProducts } from '@/lib/admin-products';
+import { filterProducts, paginate } from '@/lib/catalog';
 import { formatCents } from '@/lib/money';
+import { stockState } from '@/lib/stock';
 import { cn } from '@/lib/utils';
-import type { Paginated, Product } from '@/types/api';
+import type { Product } from '@/types/api';
 
 const PAGE_SIZE = 10;
 type StatusFilter = '' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
@@ -34,18 +37,13 @@ function statusVariant(status: Product['status']) {
 export default function ProductsPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>('');
+  const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
   const [page, setPage] = useState(1);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const query = useQuery({
-    queryKey: ['admin-products', status, page],
-    queryFn: async () => {
-      const params: Record<string, string | number> = { page, limit: PAGE_SIZE };
-      if (status) params.status = status;
-      return (
-        await api.get<Paginated<Product>>('/admin/products', { params })
-      ).data;
-    },
+    queryKey: ['admin-products', 'all'],
+    queryFn: fetchAllAdminProducts,
   });
 
   async function changeStatus(product: Product, nextStatus: Product['status']) {
@@ -79,8 +77,11 @@ export default function ProductsPage() {
     }
   }
 
-  const products = query.data?.data ?? [];
-  const totalPages = Math.max(1, query.data?.meta.totalPages ?? 1);
+  const products = query.data ?? [];
+  const filtered = filterProducts(products, { status, onlyOutOfStock });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageProducts = paginate(filtered, currentPage, PAGE_SIZE);
 
   return (
     <div className="grid gap-6">
@@ -104,8 +105,8 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-[minmax(180px,260px)_1fr] sm:items-end">
-        <label className="field-label" htmlFor="product-status">
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="field-label sm:max-w-[260px]" htmlFor="product-status">
           Status
           <Select
             id="product-status"
@@ -121,9 +122,19 @@ export default function ProductsPage() {
             <option value="ARCHIVED">Arquivado</option>
           </Select>
         </label>
+        <Button
+          variant={onlyOutOfStock ? 'primary' : 'secondary'}
+          aria-pressed={onlyOutOfStock}
+          onClick={() => {
+            setOnlyOutOfStock((value) => !value);
+            setPage(1);
+          }}
+        >
+          <Archive aria-hidden="true" className="size-4" /> Mostrar só esgotados
+        </Button>
         {query.data && (
-          <p className="text-sm text-muted-foreground sm:justify-self-end">
-            {query.data.meta.total} {query.data.meta.total === 1 ? 'produto' : 'produtos'}
+          <p className="text-sm text-muted-foreground sm:ml-auto sm:pb-2">
+            {filtered.length} {filtered.length === 1 ? 'produto' : 'produtos'}
           </p>
         )}
       </section>
@@ -145,7 +156,7 @@ export default function ProductsPage() {
               </Button>
             </div>
           </div>
-        ) : products.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="grid min-h-56 place-items-center px-6 text-center">
             <div>
               <p className="font-semibold">Nenhum produto neste filtro.</p>
@@ -173,7 +184,7 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((product) => (
+                {pageProducts.map((product) => (
                   <tr key={product.id}>
                     <td>
                       <div className="flex min-w-52 items-center gap-3">
@@ -197,7 +208,13 @@ export default function ProductsPage() {
                     </td>
                     <td>{product.category.name}</td>
                     <td className="tabular-nums">{formatCents(product.price)}</td>
-                    <td className="tabular-nums">{product.totalStock}</td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2 tabular-nums">
+                        <span>{product.totalStock}</span>
+                        {stockState(product.totalStock) === 'out' && <Badge variant="out">ESGOTADO</Badge>}
+                        {stockState(product.totalStock) === 'low' && <Badge variant="draft">Estoque baixo</Badge>}
+                      </div>
+                    </td>
                     <td><Badge variant={statusVariant(product.status)}>{statusLabel(product.status)}</Badge></td>
                     <td>
                       <div className="flex items-center justify-end gap-1">
@@ -258,13 +275,13 @@ export default function ProductsPage() {
       {!query.isPending && !query.isError && (
         <nav aria-label="Paginação de produtos" className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            Página {page} de {totalPages}
+            Página {currentPage} de {totalPages}
           </p>
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+            <Button variant="secondary" size="sm" disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)}>
               <ArrowLeft aria-hidden="true" className="size-4" /> Anterior
             </Button>
-            <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>
+            <Button variant="secondary" size="sm" disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)}>
               Próxima <ArrowRight aria-hidden="true" className="size-4" />
             </Button>
           </div>

@@ -40,6 +40,7 @@ export interface Product {
   variants: Variant[];
   totalStock: number;
   inStock: boolean;
+  available?: boolean;
   createdAt: string;
   updatedAt: string;
 }
