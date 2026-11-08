@@ -13,6 +13,7 @@ import { Admin } from '../common/guards/decorators/admin.decorator';
 import { readMultipartFile } from '../common/multipart';
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { UploadService } from './upload.service';
+import { ALLOWED_MIME_TYPES } from './upload.utils';
 
 @ApiTags('upload')
 @Controller('upload')
@@ -44,6 +45,8 @@ export class UploadController {
     description: 'Formato não suportado (use JPG, PNG ou WebP)',
   })
   async upload(@Req() req: FastifyRequest): Promise<UploadResponseDto> {
-    return this.uploadService.uploadImage(await readMultipartFile(req));
+    return this.uploadService.uploadImage(
+      await readMultipartFile(req, 'file', ALLOWED_MIME_TYPES),
+    );
   }
 }

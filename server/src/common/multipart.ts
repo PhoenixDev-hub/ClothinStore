@@ -1,4 +1,8 @@
-import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
+import {
+  BadRequestException,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { MAX_IMAGE_BYTES } from '../upload/upload.utils';
 
@@ -6,6 +10,7 @@ import { MAX_IMAGE_BYTES } from '../upload/upload.utils';
 export async function readMultipartFile(
   req: FastifyRequest,
   field = 'file',
+  allowedMimeTypes?: readonly string[],
 ): Promise<Buffer> {
   if (!req.isMultipart()) {
     throw new BadRequestException(
@@ -16,6 +21,12 @@ export async function readMultipartFile(
   const part = await req.file();
   if (!part || part.fieldname !== field) {
     throw new BadRequestException(`Campo "${field}" é obrigatório`);
+  }
+
+  if (allowedMimeTypes && !allowedMimeTypes.includes(part.mimetype)) {
+    throw new UnsupportedMediaTypeException(
+      'Apenas imagens JPG, PNG ou WebP são aceitas',
+    );
   }
 
   try {

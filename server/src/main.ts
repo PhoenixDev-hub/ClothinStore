@@ -1,4 +1,3 @@
-import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import { ValidationPipe } from '@nestjs/common';
@@ -14,6 +13,7 @@ import type { IncomingMessage } from 'node:http';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { CORS_METHODS } from './config/cors';
+import { registerSecurityHeaders } from './config/security';
 import { MAX_IMAGE_BYTES } from './upload/upload.utils';
 
 async function bootstrap() {
@@ -37,7 +37,7 @@ async function bootstrap() {
   });
   await app.register(cookie);
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await registerSecurityHeaders(app);
   app
     .getHttpAdapter()
     .getInstance()

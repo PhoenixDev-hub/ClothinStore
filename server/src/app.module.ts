@@ -12,6 +12,7 @@ import { CartModule } from './cart/cart.module';
 import { AdminAuthModule } from './auth/admin-auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { validateEnv } from './config/env.validation';
+import { LOG_REDACT_CENSOR, LOG_REDACT_PATHS } from './config/logging';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { HealthModule } from './health/health.module';
@@ -26,15 +27,8 @@ import { UploadModule } from './upload/upload.module';
         pinoHttp: {
           level: configService.get<string>('LOG_LEVEL', 'info'),
           redact: {
-            paths: [
-              'req.headers.authorization',
-              'req.headers["x-api-key"]',
-              'req.headers.cookie',
-              'req.headers["set-cookie"]',
-              'req.body.apiKey',
-              'req.body.password',
-            ],
-            censor: '[REDACTED]',
+            paths: LOG_REDACT_PATHS,
+            censor: LOG_REDACT_CENSOR,
           },
         },
       }),
