@@ -1,16 +1,26 @@
 import { Writable } from 'node:stream';
+import type { IncomingMessage } from 'node:http';
 import pino from 'pino';
-import { LOG_REDACT_CENSOR, LOG_REDACT_PATHS } from './logging';
+import {
+  LOG_REDACT_CENSOR,
+  LOG_REDACT_PATHS,
+  serializeRequest,
+} from './logging';
+
+const capture = () => {
+  const chunks: string[] = [];
+  const stream = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      chunks.push(chunk.toString());
+      callback();
+    },
+  });
+  return { stream, output: () => chunks.join('') };
+};
 
 describe('request log redaction', () => {
   it('removes passwords and tokens from logged request data', () => {
-    const chunks: string[] = [];
-    const stream = new Writable({
-      write(chunk: Buffer, _encoding, callback) {
-        chunks.push(chunk.toString());
-        callback();
-      },
-    });
+    const { stream, output: readOutput } = capture();
     const logger = pino(
       {
         redact: { paths: LOG_REDACT_PATHS, censor: LOG_REDACT_CENSOR },
@@ -39,11 +49,16 @@ describe('request log redaction', () => {
             access_token: 'query-access-secret',
           },
         },
+        res: {
+          headers: {
+            'set-cookie': 'admin_session=res-cookie-secret',
+          },
+        },
       },
       'request',
     );
 
-    const output = chunks.join('');
+    const output = readOutput();
     expect(output).toContain(LOG_REDACT_CENSOR);
     for (const secret of [
       'header-secret',
@@ -57,8 +72,30 @@ describe('request log redaction', () => {
       'body-refresh-secret',
       'query-token-secret',
       'query-access-secret',
+      'res-cookie-secret',
     ]) {
       expect(output).not.toContain(secret);
     }
+  });
+
+  it('strips tokens from the URL query string', () => {
+    const { stream, output: readOutput } = capture();
+    const logger = pino({ serializers: { req: serializeRequest } }, stream);
+
+    logger.info(
+      {
+        req: {
+          method: 'GET',
+          url: '/api/products?token=url-token-secret&search=camiseta',
+          headers: {},
+        } as unknown as IncomingMessage,
+      },
+      'request',
+    );
+
+    const output = readOutput();
+    expect(output).toContain('/api/products');
+    expect(output).not.toContain('url-token-secret');
+    expect(output).not.toContain('?token=');
   });
 });

@@ -1,15 +1,15 @@
+import { ProductCard } from "@/components/ProductCard";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useProduct, useProducts } from "@/hooks/queries";
+import { isSoldOut } from "@/lib/product";
+import { cn, discountPercent, formatBRL } from "@/lib/utils";
+import { useCart } from "@/store/cart";
+import type { Variant } from "@/types";
+import { ChevronRight, Minus, Plus, RefreshCw, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { ChevronRight, Minus, Plus, RefreshCw, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { useProduct, useProducts } from "@/hooks/queries";
-import { ProductCard } from "@/components/ProductCard";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { useCart } from "@/store/cart";
-import { cn, discountPercent, formatBRL } from "@/lib/utils";
-import { isSoldOut } from "@/lib/product";
-import type { Variant } from "@/types";
 
 function Loading() {
   return (
@@ -272,7 +272,7 @@ export default function ProductDetail() {
           </div>
 
           <ul className="mt-5 space-y-3 rounded-2xl border border-border bg-white p-5 text-sm">
-            <li className="flex items-center gap-3"><Truck className="size-4 shrink-0 text-wine" /> Envio para todo o Brasil ou retirada na loja</li>
+            <li className="flex items-center gap-3"><Truck className="size-4 shrink-0 text-wine" /> Envio para a localidade ou retirada na loja</li>
             <li className="flex items-center gap-3"><RefreshCw className="size-4 shrink-0 text-wine" /> Primeira troca grátis em até 7 dias</li>
             <li className="flex items-center gap-3"><ShieldCheck className="size-4 shrink-0 text-wine" /> Pedido confirmado pelo WhatsApp</li>
           </ul>

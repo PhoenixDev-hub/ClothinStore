@@ -6,7 +6,7 @@ import { useCategories } from "@/hooks/queries";
 const YEAR = new Date().getFullYear();
 
 const PERKS = [
-  { icon: Truck, title: "Frete para todo o Brasil", text: "Correios, motoboy ou retirada na loja" },
+  { icon: Truck, title: "Entrega local", text: "motoboy ou retirada na loja" },
   { icon: RefreshCw, title: "Troca fácil", text: "Primeira troca grátis em até 7 dias" },
   { icon: ShieldCheck, title: "Compra segura", text: "Pedido confirmado com atendimento humano" },
   { icon: CreditCard, title: "Pagamento flexível", text: "Pix ou cartão, combinado no WhatsApp" },

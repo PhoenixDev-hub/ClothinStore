@@ -1,5 +1,6 @@
 const MESSAGES = [
-  "Envio para todo o Brasil",
+  "Pode ser retirado na loja",
+  "Envio para a localidade",
   "Primeira troca grátis",
   "Atendimento personalizado",
   "Finalize seu pedido direto pelo WhatsApp",

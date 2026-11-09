@@ -12,7 +12,11 @@ import { CartModule } from './cart/cart.module';
 import { AdminAuthModule } from './auth/admin-auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { validateEnv } from './config/env.validation';
-import { LOG_REDACT_CENSOR, LOG_REDACT_PATHS } from './config/logging';
+import {
+  LOG_REDACT_CENSOR,
+  LOG_REDACT_PATHS,
+  serializeRequest,
+} from './config/logging';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { HealthModule } from './health/health.module';
@@ -26,6 +30,7 @@ import { UploadModule } from './upload/upload.module';
       useFactory: (configService: ConfigService) => ({
         pinoHttp: {
           level: configService.get<string>('LOG_LEVEL', 'info'),
+          serializers: { req: serializeRequest },
           redact: {
             paths: LOG_REDACT_PATHS,
             censor: LOG_REDACT_CENSOR,
